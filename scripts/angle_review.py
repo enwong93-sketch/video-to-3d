@@ -14,6 +14,8 @@ from typing import Any
 
 from PIL import Image, ImageChops, ImageDraw
 
+from artifact_safety import read_json_limited, safe_output_path, validate_image_size, validate_view_ids
+
 from coordinate_color_compare import (
     COMPARE_SCHEMA as COORDINATE_COLOR_SCHEMA,
     ColorCompareError,
@@ -59,13 +61,7 @@ def sha256(path: Path) -> str:
 
 
 def read_json(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ReviewError(f"cannot read JSON: {path}") from exc
-    if not isinstance(payload, dict):
-        raise ReviewError(f"JSON root must be an object: {path}")
-    return payload
+    return read_json_limited(path, error_type=ReviewError)
 
 
 def write_json(path: Path, payload: Any) -> None:
@@ -122,6 +118,7 @@ def prepare(args: argparse.Namespace) -> int:
         raise ReviewError("every-angle coordinate/color evidence is invalid: " + "; ".join(color_verification["errors"]))
     if coordinate_color.get("reference_set_sha256") != sha256(reference_path) or coordinate_color.get("alignment_sha256") != sha256(alignment_path) or coordinate_color.get("render_report_sha256") != sha256(render_path) or coordinate_color.get("mask_layer_report_sha256") != sha256(mask_layer_path):
         raise ReviewError("coordinate/color report does not match the current reference, alignment, renders, and mask layers")
+    validate_view_ids(reference.get("views") or [], error_type=ReviewError)
     views = {row["view_id"]: row for row in reference.get("views") or []}
     alignments = {row["view_id"]: row for row in alignment.get("views") or []}
     renders = {row["view_id"]: row for row in render.get("renders") or []}
@@ -166,10 +163,11 @@ def prepare(args: argparse.Namespace) -> int:
             "center_error_pct_of_frame_diagonal": round(center_error_pct, 6),
         }
         overlay = Image.blend(ref_scaled, Image.alpha_composite(Image.new("RGBA", model.size, (128, 128, 128, 255)), model), 0.5)
-        overlay_path = evidence_dir / f"{view_id}-overlay.png"
+        validate_image_size(*model.size, count=len(views), error_type=ReviewError)
+        overlay_path = safe_output_path(evidence_dir, f"{view_id}-overlay.png", error_type=ReviewError)
         overlay.save(overlay_path)
         difference = ImageChops.difference(ref_scaled.convert("RGB"), Image.alpha_composite(Image.new("RGBA", model.size, (128, 128, 128, 255)), model).convert("RGB"))
-        difference_path = evidence_dir / f"{view_id}-difference.png"
+        difference_path = safe_output_path(evidence_dir, f"{view_id}-difference.png", error_type=ReviewError)
         difference.save(difference_path)
         panel = Image.new("RGB", (model.width * 3, model.height), "#202020")
         panel.paste(ref_scaled.convert("RGB"), (0, 0))
@@ -177,7 +175,7 @@ def prepare(args: argparse.Namespace) -> int:
         panel.paste(overlay.convert("RGB"), (model.width * 2, 0))
         draw = ImageDraw.Draw(panel)
         draw.text((12, 12), f"{view_id} | reference / render / overlay", fill="white")
-        panel_path = evidence_dir / f"{view_id}-panel.png"
+        panel_path = safe_output_path(evidence_dir, f"{view_id}-panel.png", error_type=ReviewError)
         panel.save(panel_path)
         rows.append(
             {

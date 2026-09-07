@@ -12,6 +12,7 @@ from typing import Any
 OBSERVATIONS_SCHEMA = "video-to-3d-model/rotation-observations/v1"
 AUDIT_SCHEMA = "video-to-3d-model/rotation-audit/v1"
 MIN_ORIENTATION_BANDS = 8
+MAX_OBSERVATIONS = 73
 
 
 class RotationContractError(ValueError):
@@ -65,6 +66,9 @@ def validate_observations(payload: dict[str, Any], source_hash: str | None = Non
         errors.append("rms_error_deg must be greater than 0 and at most max_error_deg")
 
     raw_rows = payload.get("observations") if isinstance(payload.get("observations"), list) else []
+    if len(raw_rows) > MAX_OBSERVATIONS:
+        errors.append(f"observations must contain at most {MAX_OBSERVATIONS} rows")
+        raw_rows = raw_rows[:MAX_OBSERVATIONS]
     parsed: list[dict[str, Any]] = []
     for index, row in enumerate(raw_rows):
         if not isinstance(row, dict):

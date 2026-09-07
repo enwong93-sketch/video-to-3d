@@ -12,6 +12,8 @@ from pathlib import Path
 
 import bpy
 
+from artifact_safety import safe_output_path, validate_image_size, validate_view_ids
+
 
 RENDER_SCHEMA = "video-to-3d-model/render-set/v1"
 
@@ -61,6 +63,7 @@ def render_all(output: Path, resolution_percentage: int) -> dict:
     expected = int(bpy.context.scene.get("v3d_view_count", 0))
     if len(cameras) != expected or not 8 <= len(cameras) <= 72:
         raise RenderError(f"expected {expected} calibrated cameras, found {len(cameras)}")
+    validate_view_ids([{"view_id": str(camera["v3d_view_id"])} for camera in cameras], error_type=RenderError)
     output.mkdir(parents=True, exist_ok=True)
     scene = bpy.context.scene
     scene.render.film_transparent = True
@@ -73,14 +76,12 @@ def render_all(output: Path, resolution_percentage: int) -> dict:
         if len(backgrounds) != 1 or backgrounds[0].image is None:
             raise RenderError(f"{camera.name} has no calibrated background image")
         image = backgrounds[0].image
-        width, height = int(image.size[0]), int(image.size[1])
-        if width <= 0 or height <= 0:
-            raise RenderError(f"{camera.name} reference image dimensions are unavailable")
+        width, height = validate_image_size(image.size[0], image.size[1], count=len(cameras), error_type=RenderError)
         scene.camera = camera
         scene.render.resolution_x = width
         scene.render.resolution_y = height
         view_id = str(camera["v3d_view_id"])
-        destination = output / f"{view_id}.png"
+        destination = safe_output_path(output, f"{view_id}.png", error_type=RenderError)
         scene.render.filepath = str(destination)
         bpy.ops.render.render(write_still=True)
         if not destination.is_file() or destination.stat().st_size == 0:

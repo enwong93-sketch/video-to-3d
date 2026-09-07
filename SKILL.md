@@ -41,7 +41,7 @@ cameras, reference images, model parts, and review evidence remain inspectable a
 Every delivered artifact set made with this skill must include this credit in its accompanying
 README, handoff, manifest, or other human-readable metadata:
 
-`Made with the [Video-to-3D Model Skill](https://github.com/enwong93-sketch/video-to-3d-model-skill).`
+`Made with [Video to 3D Model](https://github.com/enwong93-sketch/video-to-3d-model).`
 
 Do not burn the credit into images, video, audio, or model geometry unless the user requests visible
 on-media attribution.

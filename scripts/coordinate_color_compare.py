@@ -14,6 +14,8 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageChops, ImageDraw, ImageStat
 
+from artifact_safety import read_json_limited, safe_output_path, validate_image_size, validate_view_ids
+
 from occlusion_mask_test import (
     ALIGNMENT_SCHEMA,
     COMPARE_SCHEMA as MASK_LAYER_SCHEMA,
@@ -47,13 +49,7 @@ def sha256(path: Path) -> str:
 
 
 def read_json(path: Path) -> dict[str, Any]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ColorCompareError(f"cannot read JSON: {path}") from exc
-    if not isinstance(value, dict):
-        raise ColorCompareError(f"JSON root must be an object: {path}")
-    return value
+    return read_json_limited(path, error_type=ColorCompareError)
 
 
 def write_json(path: Path, value: Any) -> None:
@@ -132,6 +128,7 @@ def command_compare(args: argparse.Namespace) -> int:
         _, masks = validate_mask_manifest(masks_path, reference_path)
     except MaskError as exc:
         raise ColorCompareError(str(exc)) from exc
+    validate_view_ids(reference.get("views") or [], error_type=ColorCompareError)
     views = {row["view_id"]: row for row in reference.get("views") or []}
     renders = {row["view_id"]: row for row in render.get("renders") or []}
     layer_rows = {row["view_id"]: row for row in mask_layers.get("views") or []}
@@ -180,13 +177,14 @@ def command_compare(args: argparse.Namespace) -> int:
         difference = difference.point(lambda value: min(255, value * 3))
         checker = checkerboard(reference_projection, model_projection, args.checker_size)
         panel = make_panel(reference_projection, model_projection, blend, difference, view_id)
+        validate_image_size(*expected_size, count=len(views), error_type=ColorCompareError)
         paths = {
-            "reference_projection": evidence_dir / f"{view_id}-reference-projection.png",
-            "model_projection": evidence_dir / f"{view_id}-model-projection.png",
-            "color_overlay_50_50": evidence_dir / f"{view_id}-color-overlay-50-50.png",
-            "color_difference": evidence_dir / f"{view_id}-color-difference.png",
-            "coordinate_checkerboard": evidence_dir / f"{view_id}-coordinate-checkerboard.png",
-            "coordinate_color_panel": evidence_dir / f"{view_id}-coordinate-color-panel.png",
+            "reference_projection": safe_output_path(evidence_dir, f"{view_id}-reference-projection.png", error_type=ColorCompareError),
+            "model_projection": safe_output_path(evidence_dir, f"{view_id}-model-projection.png", error_type=ColorCompareError),
+            "color_overlay_50_50": safe_output_path(evidence_dir, f"{view_id}-color-overlay-50-50.png", error_type=ColorCompareError),
+            "color_difference": safe_output_path(evidence_dir, f"{view_id}-color-difference.png", error_type=ColorCompareError),
+            "coordinate_checkerboard": safe_output_path(evidence_dir, f"{view_id}-coordinate-checkerboard.png", error_type=ColorCompareError),
+            "coordinate_color_panel": safe_output_path(evidence_dir, f"{view_id}-coordinate-color-panel.png", error_type=ColorCompareError),
         }
         reference_projection.save(paths["reference_projection"])
         model_projection.save(paths["model_projection"])

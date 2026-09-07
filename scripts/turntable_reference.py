@@ -18,6 +18,7 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
+from artifact_safety import validate_image_size, validate_view_ids
 from rotation_audit import verify_payload as verify_rotation_audit
 from rotation_contract import AUDIT_SCHEMA
 
@@ -70,6 +71,7 @@ def run(command: list[str], *, capture: bool = True) -> subprocess.CompletedProc
             errors="replace",
             stdout=subprocess.PIPE if capture else None,
             stderr=subprocess.PIPE if capture else None,
+            timeout=120,
         )
     except FileNotFoundError as exc:
         raise IntakeError(f"Required executable is unavailable: {command[0]}") from exc
@@ -121,10 +123,11 @@ def video_facts(video: Path) -> dict[str, Any]:
         frame_rate = float(Fraction(rate_text))
     except (ValueError, ZeroDivisionError):
         frame_rate = 0.0
+    width, height = validate_image_size(stream.get("width"), stream.get("height"), error_type=IntakeError)
     return {
         "duration_seconds": duration,
-        "width": int(stream.get("width") or 0),
-        "height": int(stream.get("height") or 0),
+        "width": width,
+        "height": height,
         "frame_rate": frame_rate,
         "frame_rate_raw": rate_text,
         "codec": stream.get("codec_name"),
@@ -662,9 +665,10 @@ def verification(reference_path: Path, review_path: Path) -> dict[str, Any]:
                 errors.append(f"per-angle timing evidence is invalid: {exc}")
         else:
             errors.append(f"unsupported timing evidence kind: {timing.get('kind')}")
-    ids = [row.get("view_id") for row in views if isinstance(row, dict)]
-    if len(ids) != len(set(ids)):
-        errors.append("view IDs are not unique")
+    try:
+        validate_view_ids(views, error_type=IntakeError)
+    except IntakeError as exc:
+        errors.append(str(exc))
     hashes = [row.get("sha256") for row in views if isinstance(row, dict)]
     if len(hashes) != len(set(hashes)):
         errors.append("admitted view hashes are not unique")

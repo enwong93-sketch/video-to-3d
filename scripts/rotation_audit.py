@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from artifact_safety import read_json_limited
 from rotation_contract import AUDIT_SCHEMA, OBSERVATIONS_SCHEMA, sha256, validate_observations
 
 
@@ -20,13 +21,7 @@ def now_utc() -> str:
 
 
 def read_json(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(f"cannot read JSON: {path}") from exc
-    if not isinstance(payload, dict):
-        raise ValueError(f"JSON root must be an object: {path}")
-    return payload
+    return read_json_limited(path)
 
 
 def extract_frame(video: Path, timestamp: float, destination: Path) -> None:
@@ -44,6 +39,7 @@ def extract_frame(video: Path, timestamp: float, destination: Path) -> None:
         errors="replace",
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        timeout=120,
     )
     if result.returncode or not destination.is_file() or destination.stat().st_size == 0:
         raise ValueError(f"could not extract evidence frame at {timestamp:.6f}s: {result.stderr[-1000:]}")
@@ -66,6 +62,16 @@ def command_create(args: argparse.Namespace) -> int:
     draft.setdefault("limits", {})
     draft["limits"]["max_error_deg"] = args.max_error_deg
     draft["limits"]["rms_error_deg"] = args.rms_error_deg
+
+    preflight_draft = dict(draft)
+    preflight_draft["observations"] = [
+        {**row, "evidence": {"path": "pending", "sha256": "0" * 64}}
+        if isinstance(row, dict) else row
+        for row in (draft.get("observations") or [])
+    ]
+    preflight = validate_observations(preflight_draft, source_hash=sha256(source))
+    if preflight["errors"]:
+        raise ValueError("invalid observations: " + "; ".join(preflight["errors"]))
 
     evidence_dir = output.parent / f"{output.stem}-evidence"
     if evidence_dir.exists() and any(evidence_dir.iterdir()):

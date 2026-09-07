@@ -15,6 +15,8 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageDraw, ImageStat
 
+from artifact_safety import read_json_limited, safe_output_path, validate_image_size, validate_view_ids
+
 
 REFERENCE_SCHEMA = "video-to-3d-model/reference-set/v2"
 ALIGNMENT_SCHEMA = "video-to-3d-model/alignment/v1"
@@ -41,13 +43,7 @@ def sha256(path: Path) -> str:
 
 
 def read_json(path: Path) -> dict[str, Any]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise MaskError(f"cannot read JSON: {path}") from exc
-    if not isinstance(value, dict):
-        raise MaskError(f"JSON root must be an object: {path}")
-    return value
+    return read_json_limited(path, error_type=MaskError)
 
 
 def write_json(path: Path, value: Any) -> None:
@@ -155,6 +151,7 @@ def command_masks(args: argparse.Namespace) -> int:
     rows: list[dict[str, Any]] = []
     overlays: list[Image.Image] = []
     labels: list[str] = []
+    validate_view_ids(views, error_type=MaskError)
     warnings: list[str] = []
     for view in views:
         view_id = str(view["view_id"])
@@ -185,10 +182,11 @@ def command_masks(args: argparse.Namespace) -> int:
             raise MaskError(f"{view_id} mask is empty")
         if bbox[0] == 0 or bbox[1] == 0 or bbox[2] == mask.width or bbox[3] == mask.height:
             warnings.append(f"{view_id} mask touches a frame edge; inspect crop and segmentation")
-        mask_path = masks_dir / f"{view_id}.png"
+        validate_image_size(reference_image.width, reference_image.height, count=len(views), error_type=MaskError)
+        mask_path = safe_output_path(masks_dir, f"{view_id}.png", error_type=MaskError)
         mask.save(mask_path)
         overlay = mask_review_overlay(reference_image, mask)
-        overlay_path = review_dir / f"{view_id}-mask-overlay.png"
+        overlay_path = safe_output_path(review_dir, f"{view_id}-mask-overlay.png", error_type=MaskError)
         overlay.save(overlay_path)
         overlays.append(overlay)
         labels.append(view_id)
@@ -373,8 +371,8 @@ def command_compare(args: argparse.Namespace) -> int:
             raise MaskError(f"{view_id} reference or model mask is empty")
         layer = make_layer_overlay(reference_mask, model_mask)
         context = make_context_overlay(reference, layer, reference_mask, model_mask, view_id)
-        layer_path = evidence_dir / f"{view_id}-mask-layer-overlay.png"
-        context_path = evidence_dir / f"{view_id}-mask-layer-overlay-on-reference.png"
+        layer_path = safe_output_path(evidence_dir, f"{view_id}-mask-layer-overlay.png", error_type=MaskError)
+        context_path = safe_output_path(evidence_dir, f"{view_id}-mask-layer-overlay-on-reference.png", error_type=MaskError)
         layer.save(layer_path)
         context.save(context_path)
         rows.append(

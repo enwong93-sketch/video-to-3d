@@ -16,6 +16,8 @@ import bpy
 from bpy_extras.object_utils import world_to_camera_view
 from mathutils import Vector
 
+from artifact_safety import read_json_limited, validate_image_size, validate_view_ids
+
 
 REFERENCE_SCHEMA = "video-to-3d-model/reference-set/v2"
 ALIGNMENT_SCHEMA = "video-to-3d-model/alignment/v1"
@@ -41,13 +43,7 @@ def sha256(path: Path) -> str:
 
 
 def read_json(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise SetupError(f"cannot read JSON: {path}") from exc
-    if not isinstance(payload, dict):
-        raise SetupError(f"JSON root must be an object: {path}")
-    return payload
+    return read_json_limited(path, error_type=SetupError)
 
 
 def resolve_under(base: Path, relative: str) -> Path:
@@ -71,6 +67,7 @@ def load_contract(reference_path: Path, alignment_path: Path) -> tuple[dict[str,
     views = reference.get("views") if isinstance(reference.get("views"), list) else []
     if not MIN_ANGLES <= len(views) <= MAX_ANGLES:
         raise SetupError(f"reference set must contain {MIN_ANGLES}-{MAX_ANGLES} views")
+    validate_view_ids(views, error_type=SetupError)
     try:
         target_height = float(alignment["target_height_m"])
         target_center_z = float(alignment.get("target_center_z_m", target_height / 2.0))
@@ -95,8 +92,7 @@ def load_contract(reference_path: Path, alignment_path: Path) -> tuple[dict[str,
     for view in views:
         view_id = str(view["view_id"])
         row = aligned_by_id[view_id]
-        width = int(view["width"])
-        height = int(view["height"])
+        width, height = validate_image_size(view["width"], view["height"], count=len(views), error_type=SetupError)
         try:
             left, top, right, bottom = [float(value) for value in row["subject_bbox_px"]]
         except (KeyError, TypeError, ValueError) as exc:

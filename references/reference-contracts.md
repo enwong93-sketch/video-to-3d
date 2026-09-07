@@ -53,12 +53,12 @@ irregular, but every evidence file must be a decoded source frame with an intact
 ```json
 {
   "schema": "video-to-3d-model/angle-anchors/v1",
-  "source": {"path": "C:/absolute/source.mp4", "sha256": "..."},
+  "source": {"path": "<absolute-source-video>", "sha256": "..."},
   "anchors": [
     {
       "yaw_deg": 0,
       "timestamp_seconds": 1.25,
-      "evidence": {"path": "C:/absolute/anchor-000.png", "sha256": "..."}
+      "evidence": {"path": "<absolute-evidence-image>", "sha256": "..."}
     }
   ]
 }

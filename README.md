@@ -1,4 +1,4 @@
-# Video-to-3D Model Skill
+# Video to 3D Model
 
 An evidence-driven Codex Agent Skill for turning a fixed-character turntable video or an approved
 whole multi-view character sheet into an editable Blender character model.
@@ -21,7 +21,7 @@ lookdev as separate review gates.
 Clone the repository into your Codex skills directory:
 
 ```powershell
-git clone https://github.com/enwong93-sketch/video-to-3d-model-skill.git `
+git clone https://github.com/enwong93-sketch/video-to-3d-model.git `
   "$env:USERPROFILE\.codex\skills\video-to-3d-model"
 ```
 
@@ -51,7 +51,7 @@ The complete operating contract is in [SKILL.md](SKILL.md).
 Artifact sets made with this skill must carry this credit in an accompanying README, handoff,
 manifest, or other human-readable metadata:
 
-> Made with the [Video-to-3D Model Skill](https://github.com/enwong93-sketch/video-to-3d-model-skill).
+> Made with [Video to 3D Model](https://github.com/enwong93-sketch/video-to-3d-model).
 
 The credit does not need to be burned into rendered media or model geometry.
 
