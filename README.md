@@ -38,7 +38,7 @@ Start a new Codex task after installation so the skill catalogue refreshes.
 Check the local toolchain:
 
 ```powershell
-python scripts/turntable_reference.py doctor --blender C:\path\to\blender.exe
+python scripts/turntable_reference.py doctor --blender <path-to-blender.exe>
 ```
 
 ## Use
