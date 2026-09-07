@@ -23,10 +23,10 @@ from rotation_audit import verify_payload as verify_rotation_audit
 from rotation_contract import AUDIT_SCHEMA
 
 
-SCHEMA = "video-to-3d-model/reference-set/v2"
-REVIEW_SCHEMA = "video-to-3d-model/source-review/v2"
-REPORT_SCHEMA = "video-to-3d-model/reference-verification/v2"
-ANCHORS_SCHEMA = "video-to-3d-model/angle-anchors/v1"
+SCHEMA = "video-to-3d/reference-set/v2"
+REVIEW_SCHEMA = "video-to-3d/source-review/v2"
+REPORT_SCHEMA = "video-to-3d/reference-verification/v2"
+ANCHORS_SCHEMA = "video-to-3d/angle-anchors/v1"
 MIN_ANGLES = 8
 MAX_ANGLES = 72
 REQUIRED_GATES = (
@@ -385,7 +385,7 @@ def command_probe(args: argparse.Namespace) -> int:
     sheet = out / "probe-contact-sheet.png"
     make_contact_sheet(images, sheet, args.columns)
     payload = {
-        "schema": "video-to-3d-model/probe/v2",
+        "schema": "video-to-3d/probe/v2",
         "created_at": now_utc(),
         "source": {"path": str(video), "sha256": sha256(video), **facts},
         "interval": {"start_seconds": start, "end_seconds": end},

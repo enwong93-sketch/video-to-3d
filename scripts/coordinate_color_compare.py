@@ -28,8 +28,8 @@ from occlusion_mask_test import (
 )
 
 
-COMPARE_SCHEMA = "video-to-3d-model/coordinate-color-comparison/v1"
-VERIFY_SCHEMA = "video-to-3d-model/coordinate-color-verification/v1"
+COMPARE_SCHEMA = "video-to-3d/coordinate-color-comparison/v1"
+VERIFY_SCHEMA = "video-to-3d/coordinate-color-verification/v1"
 
 
 class ColorCompareError(RuntimeError):

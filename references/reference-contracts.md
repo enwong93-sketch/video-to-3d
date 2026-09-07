@@ -18,7 +18,7 @@ extracts and hashes those evidence frames.
 
 ```json
 {
-  "schema": "video-to-3d-model/rotation-observations/v1",
+  "schema": "video-to-3d/rotation-observations/v1",
   "source": {},
   "turn": {
     "start_seconds": 1.25,
@@ -52,7 +52,7 @@ irregular, but every evidence file must be a decoded source frame with an intact
 
 ```json
 {
-  "schema": "video-to-3d-model/angle-anchors/v1",
+  "schema": "video-to-3d/angle-anchors/v1",
   "source": {"path": "<absolute-source-video>", "sha256": "..."},
   "anchors": [
     {
@@ -76,7 +76,7 @@ costume extensions, accessories, and soles.
 
 ```json
 {
-  "schema": "video-to-3d-model/alignment/v1",
+  "schema": "video-to-3d/alignment/v1",
   "reference_set_sha256": "...",
   "target_height_m": 1.7,
   "target_center_z_m": 0.85,
@@ -96,7 +96,7 @@ to place the shared model origin at the observed subject center, and records the
 
 ## Reference-character masks
 
-`reference-masks.json` uses schema `video-to-3d-model/reference-masks/v1` and is bound to the exact
+`reference-masks.json` uses schema `video-to-3d/reference-masks/v1` and is bound to the exact
 `reference-set.json` SHA-256. It contains exactly one full-resolution binary PNG per `view_id`:
 
 - white `255` means a pixel visibly covered by the reference character;
@@ -114,7 +114,7 @@ because the source itself is cropped.
 
 ## Same-coordinate model/reference mask layers
 
-`mask-layer-comparison.json` uses schema `video-to-3d-model/mask-layer-comparison/v2` and binds the
+`mask-layer-comparison.json` uses schema `video-to-3d/mask-layer-comparison/v2` and binds the
 reference set, alignment, render report, and admitted mask manifest by hash. For each `view_id`, the
 tool places exactly two binary layers on one canvas:
 
@@ -143,7 +143,7 @@ whether scale or geometry differs, checks neighboring angles, performs the repai
 ## Same-camera coordinate and color projection
 
 `coordinate-color-comparison.json` uses schema
-`video-to-3d-model/coordinate-color-comparison/v1`. It is bound by SHA-256 to the reference set,
+`video-to-3d/coordinate-color-comparison/v1`. It is bound by SHA-256 to the reference set,
 alignment, Blender render report, and completed Step 5 mask-layer report. Step 6 refuses to start
 until every Step 5 `agent_review.status` is `pass`.
 

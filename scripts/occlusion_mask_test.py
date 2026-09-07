@@ -18,12 +18,12 @@ from PIL import Image, ImageDraw, ImageStat
 from artifact_safety import read_json_limited, safe_output_path, validate_image_size, validate_view_ids
 
 
-REFERENCE_SCHEMA = "video-to-3d-model/reference-set/v2"
-ALIGNMENT_SCHEMA = "video-to-3d-model/alignment/v1"
-RENDER_SCHEMA = "video-to-3d-model/render-set/v1"
-MASK_SCHEMA = "video-to-3d-model/reference-masks/v1"
-COMPARE_SCHEMA = "video-to-3d-model/mask-layer-comparison/v2"
-VERIFY_SCHEMA = "video-to-3d-model/mask-layer-verification/v2"
+REFERENCE_SCHEMA = "video-to-3d/reference-set/v2"
+ALIGNMENT_SCHEMA = "video-to-3d/alignment/v1"
+RENDER_SCHEMA = "video-to-3d/render-set/v1"
+MASK_SCHEMA = "video-to-3d/reference-masks/v1"
+COMPARE_SCHEMA = "video-to-3d/mask-layer-comparison/v2"
+VERIFY_SCHEMA = "video-to-3d/mask-layer-verification/v2"
 
 
 class MaskError(RuntimeError):

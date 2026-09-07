@@ -15,7 +15,7 @@ import bpy
 from artifact_safety import safe_output_path, validate_image_size, validate_view_ids
 
 
-RENDER_SCHEMA = "video-to-3d-model/render-set/v1"
+RENDER_SCHEMA = "video-to-3d/render-set/v1"
 
 
 class RenderError(RuntimeError):

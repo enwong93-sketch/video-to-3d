@@ -143,7 +143,7 @@ def verify_payload(audit_path: Path, video: Path | None = None) -> dict[str, Any
     if audit.get("metrics") != report["metrics"]:
         errors.append("stored uniformity metrics do not match recomputation")
     return {
-        "schema": "video-to-3d-model/rotation-audit-verification/v1",
+        "schema": "video-to-3d/rotation-audit-verification/v1",
         "checked_at": now_utc(),
         "status": "pass" if not errors else "fail",
         "audit": str(audit_path),

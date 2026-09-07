@@ -19,9 +19,9 @@ from mathutils import Vector
 from artifact_safety import read_json_limited, validate_image_size, validate_view_ids
 
 
-REFERENCE_SCHEMA = "video-to-3d-model/reference-set/v2"
-ALIGNMENT_SCHEMA = "video-to-3d-model/alignment/v1"
-SETUP_SCHEMA = "video-to-3d-model/blender-reference-setup/v1"
+REFERENCE_SCHEMA = "video-to-3d/reference-set/v2"
+ALIGNMENT_SCHEMA = "video-to-3d/alignment/v1"
+SETUP_SCHEMA = "video-to-3d/blender-reference-setup/v1"
 MIN_ANGLES = 8
 MAX_ANGLES = 72
 
@@ -347,7 +347,7 @@ def verify_scene(reference_path: Path, alignment_path: Path) -> dict[str, Any]:
         if max(abs(float(value)) for value in (*root.location, *root.rotation_euler)) > 1e-7 or max(abs(float(value) - 1.0) for value in root.scale) > 1e-7:
             errors.append("V3D_MODEL_ROOT transform is not identity")
     return {
-        "schema": "video-to-3d-model/blender-reference-verification/v1",
+        "schema": "video-to-3d/blender-reference-verification/v1",
         "checked_at": now_utc(),
         "status": "pass" if not errors else "fail",
         "blend": str(Path(bpy.data.filepath).resolve()) if bpy.data.filepath else "",

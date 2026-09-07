@@ -28,11 +28,11 @@ from occlusion_mask_test import (
 )
 
 
-REFERENCE_SCHEMA = "video-to-3d-model/reference-set/v2"
-ALIGNMENT_SCHEMA = "video-to-3d-model/alignment/v1"
-RENDER_SCHEMA = "video-to-3d-model/render-set/v1"
-REVIEW_SCHEMA = "video-to-3d-model/every-angle-review/v4"
-REPORT_SCHEMA = "video-to-3d-model/every-angle-verification/v4"
+REFERENCE_SCHEMA = "video-to-3d/reference-set/v2"
+ALIGNMENT_SCHEMA = "video-to-3d/alignment/v1"
+RENDER_SCHEMA = "video-to-3d/render-set/v1"
+REVIEW_SCHEMA = "video-to-3d/every-angle-review/v4"
+REPORT_SCHEMA = "video-to-3d/every-angle-verification/v4"
 GATES = (
     "mask_layer_match",
     "coordinate_color_match",

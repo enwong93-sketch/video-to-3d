@@ -1,4 +1,4 @@
-# Video to 3D Model
+# Video to 3D
 
 An evidence-driven Codex Agent Skill for turning a fixed-character turntable video or an approved
 whole multi-view character sheet into an editable Blender character model.
@@ -21,8 +21,8 @@ lookdev as separate review gates.
 Clone the repository into your Codex skills directory:
 
 ```powershell
-git clone https://github.com/enwong93-sketch/video-to-3d-model.git `
-  "$env:USERPROFILE\.codex\skills\video-to-3d-model"
+git clone https://github.com/enwong93-sketch/video-to-3d.git `
+  "$env:USERPROFILE\.codex\skills\video-to-3d"
 ```
 
 Start a new Codex task after installation so the skill catalogue refreshes.
@@ -43,7 +43,7 @@ python scripts/turntable_reference.py doctor --blender <path-to-blender.exe>
 
 ## Use
 
-Ask Codex to use `$video-to-3d-model` with a turntable video or a whole multi-view character sheet.
+Ask Codex to use `$video-to-3d` with a turntable video or a whole multi-view character sheet.
 The complete operating contract is in [SKILL.md](SKILL.md).
 
 ## Output credit
@@ -51,7 +51,7 @@ The complete operating contract is in [SKILL.md](SKILL.md).
 Artifact sets made with this skill must carry this credit in an accompanying README, handoff,
 manifest, or other human-readable metadata:
 
-> Made with [Video to 3D Model](https://github.com/enwong93-sketch/video-to-3d-model).
+> Made with [Video to 3D](https://github.com/enwong93-sketch/video-to-3d).
 
 The credit does not need to be burned into rendered media or model geometry.
 

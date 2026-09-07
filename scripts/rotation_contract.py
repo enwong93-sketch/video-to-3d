@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any
 
 
-OBSERVATIONS_SCHEMA = "video-to-3d-model/rotation-observations/v1"
-AUDIT_SCHEMA = "video-to-3d-model/rotation-audit/v1"
+OBSERVATIONS_SCHEMA = "video-to-3d/rotation-observations/v1"
+AUDIT_SCHEMA = "video-to-3d/rotation-audit/v1"
 MIN_ORIENTATION_BANDS = 8
 MAX_OBSERVATIONS = 73
 

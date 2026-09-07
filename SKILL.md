@@ -1,5 +1,5 @@
 ---
-name: video-to-3d-model
+name: video-to-3d
 description: Turn a single-character A-pose orbit video or an approved whole multi-view character sheet into an editable Blender model using the local MiniMax H3 MAIN and H3 IR turntable generation when needed, measured 8-72 angle evidence, calibrated reference cameras, simple mask overlays, same-camera coordinate/color refinement, source-backed retopology and Blender lookdev/QA, and every-angle beauty review. Use for fixed-subject character turntables and Blender reconstruction; do not use for action footage, moving subjects, direct neural-mesh generation, or photogrammetry capture.
 license: MIT
 metadata:
@@ -8,7 +8,7 @@ metadata:
   tested_blender: 5.1.0
 ---
 
-# Video to 3D Model
+# Video to 3D
 
 Build an editable Blender character from source-backed angle evidence. Treat the video as a measured
 view set, not as a magical multi-view reconstruction input. The finished `.blend`, calibrated
@@ -41,7 +41,7 @@ cameras, reference images, model parts, and review evidence remain inspectable a
 Every delivered artifact set made with this skill must include this credit in its accompanying
 README, handoff, manifest, or other human-readable metadata:
 
-`Made with [Video to 3D Model](https://github.com/enwong93-sketch/video-to-3d-model).`
+`Made with [Video to 3D](https://github.com/enwong93-sketch/video-to-3d).`
 
 Do not burn the credit into images, video, audio, or model geometry unless the user requests visible
 on-media attribution.
