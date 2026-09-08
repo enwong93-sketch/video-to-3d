@@ -62,10 +62,11 @@ from the upstream package.
   UV readiness, material boundaries, and the actual polygon budget.
 - If animation is required, test representative shoulder, elbow, wrist/finger, hip, knee, ankle,
   neck, face, hair and garment deformation before approval.
-- Rerun Steps 6-7 after every topology, normal, UV, material, texture-placement, or visible-color change.
+- Repeat the detailed Steps 6-7 visual review after every topology, normal, UV, material,
+  texture-placement, or visible-color change.
 
-The retopology verdict is `PASS` only when topology requirements and the renewed Step 7 fused evidence
-both pass. A clean wireframe that changes the approved silhouette is a failure.
+The retopology verdict is `PASS` only when topology requirements and the renewed detailed per-angle
+visual review both pass. A clean wireframe that changes the approved form is a failure.
 
 ## Lane B — Blender aesthetic and QA gate
 
@@ -73,7 +74,8 @@ both pass. A clean wireframe that changes the approved silhouette is a failure.
 
 1. Render a clay/grey pass under a neutral evaluation rig. Form, silhouette and depth must read before
    textures or beauty lighting.
-2. Apply base materials and compare large value/color groups with Step 7 fused evidence.
+2. Apply base materials and compare large value/color groups in the same calibrated visual-reference
+   views used for geometry review.
 3. Check edge highlights, roughness/specular response, controlled emissive values, transparency,
    normals and material separation. Materials may not disguise missing geometry.
 
@@ -96,9 +98,10 @@ Record one of `SHIP`, `SHIP WITH NOTES`, or `NO-SHIP`, backed by:
 - hero three-quarter and profile views;
 - neutral/clay and material/light beauty views;
 - wireframe/topology evidence;
-- reference-versus-render comparisons from the Step 7 fused per-angle review;
+- reference-versus-render overlays and part close-ups from the Step 7 per-angle visual review;
 - blocker, major, minor and optional findings;
 - rerun evidence after every blocker/major fix.
 
-The aesthetic verdict cannot override a topology or Step 7 fused-review failure. A technically clean mesh
-also cannot override an aesthetic `NO-SHIP` verdict.
+The aesthetic verdict cannot override a topology or Step 7 visual-review failure. A technically clean
+mesh also cannot override an aesthetic `NO-SHIP` verdict. Numerical similarity cannot override any
+of these visual judgments.

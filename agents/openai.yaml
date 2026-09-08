@@ -1,4 +1,4 @@
 interface:
   display_name: "Video to 3D"
-  short_description: "Build from whole multi-view sheets and measured turns"
-  default_prompt: "Use $video-to-3d to turn my whole character reference sheet or turntable into an angle-verified Blender model."
+  short_description: "Build with calibrated multi-angle visual reference"
+  default_prompt: "Use $video-to-3d to turn my whole character reference sheet or turntable into a visually refined multi-angle Blender model."

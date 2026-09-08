@@ -4,8 +4,8 @@ An evidence-driven Codex Agent Skill for turning a fixed-character turntable vid
 whole multi-view character sheet into an editable Blender character model.
 
 The workflow measures real source timecodes, extracts 8-72 verified angles, calibrates matching
-orthographic cameras, fuses same-angle mask/scale and colour refinement per view, and keeps retopology and Blender
-lookdev as separate review gates.
+orthographic cameras, and uses detailed same-angle visual reference in Blender while keeping
+retopology and lookdev as separate review gates.
 
 ## Highlights
 
@@ -14,8 +14,14 @@ lookdev as separate review gates.
 - Audits uniform rotation against observed source frames and SHA-256 evidence.
 - Imports all 8-72 views as calibrated non-rendering Blender overlays before modeling (24 by default).
 - Reviews four opposing 90-degree views per round instead of walking through adjacent angles.
-- Emits full scanline edge coordinates and pixel/world-unit corrections; silhouette pass requires zero numeric error.
-- Produces one fused mask/scale/coordinate/colour review for every angle, plus final review artifacts.
+- Uses reference-only, model-only, clay, wireframe, close-up, and adjustable-alpha overlay views for
+  detailed modeling at every angle.
+- Keeps measurements as calibration diagnostics only; pixel metrics and automated edge corrections
+  never prescribe geometry or replace visual approval.
+- Reviews shared form, silhouette, proportion/depth, part construction, visible design, material/color,
+  and beauty for every angle.
+- Preserves accepted Blender baselines during local repair and separates visual, engineering, and
+  intended-use acceptance.
 - Rejects per-camera geometry, silent angle reduction, neural-mesh substitution, and unsupported quality claims.
 
 ## Install

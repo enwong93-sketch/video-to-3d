@@ -15,6 +15,18 @@ Read this file before creating geometry or changing a calibrated model project.
   model for one view after calibration. Rebuild the alignment contract if the source box was wrong.
 - Use the camera whose `v3d_view_id` matches the reference; never compare one yaw against another.
 
+## Version and save contract
+
+- Preserve the last visually accepted scene before a substantial or local repair. Work in a new
+  version and freeze unrelated user-authored geometry, materials, cameras, rigs, and proportions.
+- Treat script completion, file existence, and viewport appearance as separate facts. Blender batch
+  work must use a non-zero Python exit code on exceptions and stop dependent renders after failure.
+- Never let a background process save the same `.blend` while an interactive Blender window contains
+  unsaved work. Write a separate candidate, reopen that exact file, and generate evidence from the
+  reopened scene.
+- Bind input scene, script, reference set, candidate `.blend`, and renders by path/version/hash when
+  several iterations coexist. Hashes identify evidence; they do not score visual similarity.
+
 ## In-Blender overlay gate
 
 Before creating character geometry, switch through every calibrated camera and confirm that the
@@ -41,43 +53,27 @@ false symmetry and depth transitions. Intermediate rounds refine continuous volu
 one locally adjacent view to drag scale or proportion away from the opposing views. Recheck every
 completed round after a retained change to overall scale, body proportion, or any large shared form.
 
-## Per-angle two-layer mask gate
+## Per-angle detailed visual-reference gate
 
-Before geometry work, create one visually admitted reference-character mask per view. At every
-retained milestone, render transparent model PNGs from all calibrated cameras. Place each model alpha
-mask directly over its same-`view_id` reference mask on one same-sized, same-coordinate canvas.
+At every retained milestone, switch to each calibrated camera and compare the reference directly
+against the same shared model. Use reference-only, model-only, clay, wireframe, and adjustable-alpha
+superimposition; capture close-ups wherever the full-body view cannot show construction clearly.
 
-The overlay is deliberately simple: green means both layers cover the pixel, red means the reference
-layer only, and blue means the model layer only. The tool also draws the two bboxes so scale and
-position differences are visible. It measures exact edge error but does not identify a body part or
-choose a 3D repair.
+Inspect the visible form rather than a score: silhouette flow, landmark placement, depth, curvature,
+plane changes, joints, negative spaces, layer thickness, attachment, asymmetry, and part identity.
+Name the defective 3D part before editing it. Correct the shared mesh by eye, then inspect the other
+three opposing cameras in the current round before retaining the change.
 
-The Agent inspects the overlay, compares neighboring yaws, decides whether shared scale or geometry
-must change, edits the model, and rerenders. Treat a faulty segmentation mask as an input problem:
-correct and re-admit the mask rather than changing the model to fit bad evidence.
+Optional masks can isolate a busy silhouette, but they cannot decide whether geometry passes. Do not
+calculate or follow pixel/world-unit edge corrections, chase exact binary equality, or let IoU, XOR,
+bbox, scanline, or similarity values prescribe vertex movement. Treat a faulty reference or mask as
+an input problem instead of deforming the model to fit it.
 
-Do not estimate edge displacement by eye when numerical constraints are available. For each camera,
-use the scanline report's signed edge deltas and required world-unit corrections to move the shared
-model toward the reference. Recompute after each adjustment. Exact silhouette closure requires zero
-XOR, IoU 1, zero bbox delta, and zero maximum edge error across all four views in the current round.
-Visual review remains mandatory for anatomy, topology, depth, part identity, and bad-mask detection.
-
-## Per-angle fused mask/scale and coordinate/color refinement gate
-
-Keep the camera rig and model transform locked. Render the same model with provisional/final
-materials, then fuse mask/scale and coordinate/color evidence on one identical camera pixel canvas.
-Pending raw mask evidence does not block generation; it is judged with color for the same angle.
-
-For every angle, inspect the six-panel fused artifact before advancing. Repair in this order:
-
-1. shared geometry or placement when corresponding features land at different coordinates;
-2. large value/color blocks and material assignment;
-3. roughness, specular response, transparency, normals and shading;
-4. UV/texture placement and reference-visible secondary details.
-
-Do not move calibrated cameras, rescale one angle, or use lighting/texture to conceal a geometry
-problem. The tool enforces exact silhouette numbers but does not score color or diagnose materials. Both nested gates and the overall view must
-pass; rerender affected neighboring angles after every retained change.
+Keep the camera rig and model transform locked. Correct form before material, then compare large
+value/color blocks, roughness, specular response, transparency, normals, shading, UV placement, and
+visible secondary details in the same views. Do not use lighting or texture to conceal missing depth
+or construction. Rerender the affected angle and all other views in its round after every retained
+change.
 
 ## Retained milestone gates
 
@@ -94,7 +90,8 @@ Blender version, output path, and naming. The fresh-process reference-rig verifi
 
 Build shared primary masses for head, neck, ribcage, pelvis, arms, legs, hands, and feet. Match total
 height, head-to-body ratio, shoulder/hip width, torso depth, limb lengths, stance, and A-pose in every
-camera. Use the two-layer mask overlay to see primary-volume scale and coverage differences at every yaw. Reject a
+camera. Use adjustable-alpha overlays, clay views, and opposing cameras to judge primary-volume scale
+and coverage at every yaw. Reject a
 front-only mannequin, flat side depth, or a profile that contradicts diagonals.
 
 ### G2 — head, face, and ears
@@ -113,8 +110,8 @@ region.
 
 Separate scalp base, fringe, side locks, rear mass, ponytails/braids, and accessories as needed.
 Match the outer silhouette and internal flow at every angle; rear hair cannot be inferred only from
-the front image. Thin locks and transparent hair edges must be represented consistently in the
-admitted mask policy before comparing the two layers.
+the front image. Judge thin locks and transparent hair edges from full-resolution reference, clay,
+wireframe, and overlay close-ups rather than forcing them into a binary outline.
 
 ### G5 — torso, limbs, hands, and feet
 
@@ -145,14 +142,13 @@ accessories. The neutral A-pose must still reproduce the reference set after rig
 
 ### G9 — final every-angle beauty audit
 
-Render the final saved/reopened model from every calibrated camera. For each view, compare reference,
-transparent render, the same-coordinate two-layer mask overlay, coordinate/color panel, checkerboard,
-ordinary overlay, and difference evidence. Step 7 fused evidence must verify and both nested gates
-must carry Agent passes before judging silhouette, scale, proportions, visible design, materials, form
-readability, intersections, anatomy, and beauty. Inspect
-face, both hands, both feet, hair rear mass, costume seams, and all asymmetry at 100% pixels. Every
-per-view `mask_layer_match`, `coordinate_color_match`, and visual gate plus the all-view final audit
-must be `pass` with evidence.
+Render the final saved/reopened model from every calibrated camera. For each view, compare the
+full-resolution reference, neutral render, clay, wireframe, adjustable-alpha overlay, and critical
+part close-ups. Judge silhouette, scale, proportions, depth, construction, visible design, materials,
+form readability, intersections, anatomy, and beauty together. Inspect
+face, both hands, both feet, hair rear mass, costume seams, and all asymmetry at native 100% zoom. Every
+per-view visual status plus the all-view final audit must be `pass` with cited evidence and written
+observations.
 
 ## Correction policy
 
@@ -162,5 +158,6 @@ dependent scaling, or presentation tricks that make only one reference line up. 
 source images cannot be reconciled by one model, fail with the conflicting view IDs and request a
 corrected source instead of inventing a compromise and calling it accurate.
 
-Structural checks, camera counts, bbox thresholds, polygon counts, or a green Blender exit code do
-not prove visual match. Keep automated and visual conclusions separate.
+Structural checks, camera counts, bbox values, polygon counts, similarity metrics, or a green Blender
+exit code do not prove visual match and may not drive modeling. Keep automated and visual conclusions
+separate.

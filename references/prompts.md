@@ -110,7 +110,7 @@ forcing it into the standing-view ground-line comparison. Record the source shee
 crop rectangle and output hash. Do not use a separate tight
 character bounding box for each panel; do not independently resize, rescale, recenter, rotate, warp,
 pad, extend, or move any character after cropping. Those operations would destroy the shared scale
-and coordinates needed for camera and mask comparison.
+and coordinates needed for calibrated camera overlays and visual comparison.
 
 After cropping, place the four standing-view PNGs in a same-sized stack and switch between them. Confirm that the
 ground line, head-top position, body height, center line, and safe margins remain consistent. If the

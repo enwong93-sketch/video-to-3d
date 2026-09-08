@@ -71,7 +71,8 @@ anchors.
 The admitted view count must be divisible by four. `analysis_order.strategy` is
 `four_quadrant_rounds`: each round contains four `view_id` values separated by exactly 90 degrees.
 For 24 views the round offsets are `0°, 45°, 15°, 60°, 30°, 75°`; each offset expands across the four
-quadrants. Every downstream Blender, mask, color, and final-review stage preserves this order.
+quadrants. Every downstream Blender, visual-reference, material, and final-review stage preserves
+this order.
 
 ## Blender alignment
 
@@ -101,89 +102,45 @@ to place the shared model origin at the observed subject center, and records the
 `background_alpha` must be 0.05-0.95. The setup imports every view as a `FRONT`/`FIT`, non-rendering
 camera reference overlay so the image can be read directly over the model while shaping it.
 
-## Reference-character masks
+## Optional reference-character masks
 
-`reference-masks.json` uses schema `video-to-3d/reference-masks/v1` and is bound to the exact
-`reference-set.json` SHA-256. It contains exactly one full-resolution binary PNG per `view_id`:
+A visually reviewed character mask may be created when background clutter makes the silhouette hard
+to read. Keep it bound to the exact source image and inspect hair, fingers, transparent edges,
+costume extensions, accessories, feet, and true negative spaces at full resolution.
 
-- white `255` means a pixel visibly covered by the reference character;
-- black `0` means background or a true visible hole between character parts;
-- antialiased or translucent source edges are converted with one recorded threshold;
-- hair, hands, individual readable fingers, costume extensions, accessories, legs, feet, and soles
-  belong in the mask whenever they are visibly present in that angle.
+The mask is only a viewing aid. Do not calculate scanline corrections, convert pixel differences to
+Blender movements, require binary equality, or use IoU/XOR/bounding-box values to approve or reject
+the model. If segmentation removes a visible feature or leaks background, correct the mask rather
+than changing geometry to fit it.
 
-Every mask row records its path, hash, dimensions, bbox, area, method, threshold, review overlay, and
-`visual_status`. The manifest also requires reviewer, review time, and an all-mask pass citing every
-view. An automatically generated alpha or corner-color mask remains `pending` until its overlay has
-been read at full resolution. Reject background leakage, lost thin details, filled arm/leg gaps,
-missing transparent design elements, invented hidden surfaces, or any mask that touches a frame edge
-because the source itself is cropped.
+## Detailed per-angle visual evidence
 
-## Same-coordinate model/reference mask layers
+`visual-reference-review.json` uses schema `video-to-3d/visual-reference-review/v1` and binds the
+reference set, alignment, Blender render report, saved `.blend`, and evidence images by SHA-256. Each
+`view_id` records:
 
-`mask-layer-comparison.json` uses schema `video-to-3d/mask-layer-comparison/v3` and binds the
-reference set, alignment, render report, and admitted mask manifest by hash. For each `view_id`, the
-tool places exactly two binary layers on one canvas:
+- untouched full-resolution reference;
+- neutral model-only render;
+- clay render;
+- wireframe evidence;
+- one or more adjustable-alpha overlay captures;
+- full-resolution close-ups for every visible critical part;
+- concise observations naming visible agreements, differences, and the shared 3D part changed;
+- `pass`, `fail`, or `pending` for `shared_form`, `silhouette`, `proportion_depth`,
+  `part_construction`, `visible_design`, `material_color`, and `beauty`.
 
-1. the admitted reference-character mask;
-2. the Blender render alpha mask.
+The review preserves the four-quadrant order. A round closes only after the Agent inspects all four
+opposing views and confirms that one shared 3D construction remains convincing across them. Each
+status is an explicit visual judgment backed by cited images; no measurement, similarity score, or
+automated overlay result may set it.
 
-Both layers use the same width, height, top-left origin, scale, and pixel coordinates. If the Blender
-render uses a proportional resolution percentage, the reference image and mask receive the exact
-same resize before layering. Any other canvas mismatch is rejected.
-
-The resulting `mask-layer-overlay.png` uses only three visible states:
-
-- green: both layers cover the same pixel;
-- red: reference-mask layer only;
-- blue: model-mask layer only.
-
-The companion `mask-layer-overlay-on-reference.png` places the same colors over the source image and
-draws the two layer bounding boxes so scale/position differences remain easy to see. The report
-stores canvas identity, both raw bboxes, output paths and hashes, plus an empty Agent review field.
-
-Each view also binds `numeric-edge-constraints.json` with schema
-`video-to-3d/numeric-edge-constraints/v1`. It records every occupied horizontal scanline's left/right
-edges, every occupied vertical scanline's top/bottom edges, signed pixel deltas, required corrections
-in pixels and Blender world units, bbox deltas, size ratios, XOR, IoU, and edge-error statistics.
-`model_edge_minus_reference_edge` is the delta convention; the required correction is its negative. A numerical pass
-requires exact binary-mask equality, not a thresholded similarity score.
-Pixel `+X` maps to camera-local `+X`; pixel `+Y` maps to camera-local `-Y`, so vertical Blender
-camera-axis corrections reverse the image-axis sign recorded beside them.
-
-The comparison tool calculates exact silhouette equality and edge corrections, but does not rank
-regions, name a defective body part, or prescribe a 3D repair. The Agent uses the numbers and image, decides
-whether scale or geometry differs, checks neighboring angles, performs the repair, and records
-`mask_layer_match` as `pass` or `fail` in the independent final review.
-
-## Fused same-angle mask, scale, coordinate, and color review
-
-`fused-multiview-comparison.json` uses schema
-`video-to-3d/fused-multiview-comparison/v2`. It is bound by SHA-256 to the reference set,
-alignment, Blender render report, and Step 6 mask-layer report. Pending mask review does not block
-generation because every angle is judged jointly in the fused report.
-
-For every `view_id`, one six-panel artifact contains mask overlap, mask on reference, reference
-color, model color, 50/50 color overlay, and color difference on the same camera-sized pixel canvas.
-The admitted reference mask removes the source background; the model alpha supplies the model layer.
-
-The tool writes:
-
-- the isolated reference projection;
-- the model projection on the same background;
-- a 50/50 layer overlay;
-- a fixed-coordinate checkerboard alternating reference and model tiles;
-- an amplified absolute RGB difference image;
-- one six-panel fused mask/scale/reference/model/overlay/difference image.
-
-The report stores the shared canvas, mask boxes, numerical edge gate, background color, paths, hashes, and one Agent review
-with nested `mask_scale` and `coordinate_color` gates. The overall row may pass only when both nested
-gates pass. It produces no color-similarity score, material diagnosis, or 3D repair prescription.
-The Agent repairs the shared model and rerenders the angle plus its neighbors before advancing.
+Reference and render must remain on the calibrated camera canvas so the superimposition is meaningful.
+Canvas size, camera count, camera identity, image hashes, and overlay availability are structural
+checks only. They prove that the evidence is comparable, not that the model matches.
 
 ## Evidence meaning
 
 The manifests prove file identity, source-frame provenance, measured timing, camera calibration, and
-that mask and color layers were displayed on the same camera coordinate canvas. They do not decide
-whether the visible difference is acceptable or identify what to repair. Likeness, anatomy,
-topology, materials, rig quality, and beauty remain Agent visual judgments.
+that visual evidence belongs to the same view. They do not decide whether a visible difference is
+acceptable or identify what to repair. Likeness, anatomy, depth, topology, materials, rig quality,
+and beauty remain detailed Agent visual judgments.
