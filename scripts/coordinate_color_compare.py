@@ -28,8 +28,8 @@ from occlusion_mask_test import (
 )
 
 
-COMPARE_SCHEMA = "video-to-3d/fused-multiview-comparison/v1"
-VERIFY_SCHEMA = "video-to-3d/fused-multiview-verification/v1"
+COMPARE_SCHEMA = "video-to-3d/fused-multiview-comparison/v2"
+VERIFY_SCHEMA = "video-to-3d/fused-multiview-verification/v2"
 
 
 class ColorCompareError(RuntimeError):
@@ -172,9 +172,9 @@ def command_compare(args: argparse.Namespace) -> int:
         difference = difference.point(lambda value: min(255, value * 3))
         checker = checkerboard(reference_projection, model_projection, args.checker_size)
         mask_evidence = layer_rows[view_id].get("evidence") or {}
-        mask_layer_path = Path(str((mask_evidence.get("mask_layer_overlay") or {}).get("path", ""))).expanduser().resolve()
+        mask_overlay_path = Path(str((mask_evidence.get("mask_layer_overlay") or {}).get("path", ""))).expanduser().resolve()
         mask_context_path = Path(str((mask_evidence.get("mask_layer_overlay_on_reference") or {}).get("path", ""))).expanduser().resolve()
-        with Image.open(mask_layer_path) as opened:
+        with Image.open(mask_overlay_path) as opened:
             mask_layer_image = opened.convert("RGBA")
         with Image.open(mask_context_path) as opened:
             mask_context_image = opened.convert("RGBA")
@@ -208,6 +208,7 @@ def command_compare(args: argparse.Namespace) -> int:
                     "canvas": layer_rows[view_id].get("canvas"),
                     "reference_mask_bbox_px": layer_rows[view_id].get("reference_mask_bbox_px"),
                     "model_mask_bbox_px": layer_rows[view_id].get("model_mask_bbox_px"),
+                    "numeric_edge": layer_rows[view_id].get("numeric_edge"),
                     "evidence": mask_evidence,
                 },
                 "evidence": {name: {"path": str(path), "sha256": sha256(path)} for name, path in paths.items()},
@@ -235,7 +236,7 @@ def command_compare(args: argparse.Namespace) -> int:
         "analysis_order": quadrant_order_manifest(views.values(), error_type=ColorCompareError),
         "views": rows,
         "review_order": "Review each view as one unit: mask/scale/position first, then coordinate/color/material, repair the shared model, and rerender affected plus neighboring views before advancing.",
-        "analysis_boundary": "This tool fuses mask/scale and coordinate/color evidence per angle. It does not score similarity or decide what to repair; the Agent performs the joint refinement judgment.",
+        "analysis_boundary": "This tool carries an exact numerical silhouette gate and fuses it with coordinate/color evidence per angle. It does not score color similarity or decide the 3D repair; the Agent performs the joint refinement judgment.",
     }
     report_path = output / "fused-multiview-comparison.json"
     write_json(report_path, report)
@@ -260,6 +261,14 @@ def validate_comparison_report(path: Path) -> dict[str, Any]:
         source = Path(str(report.get(label, ""))).expanduser().resolve()
         if not source.is_file() or sha256(source) != report.get(f"{label}_sha256"):
             errors.append(f"{label} is missing or changed")
+    layer_rows: dict[str, dict[str, Any]] = {}
+    mask_layer_path = Path(str(report.get("mask_layer_report", ""))).expanduser().resolve()
+    if mask_layer_path.is_file() and sha256(mask_layer_path) == report.get("mask_layer_report_sha256"):
+        layer_verification = validate_mask_layers(mask_layer_path)
+        if layer_verification["status"] != "pass":
+            errors.append("mask-layer report no longer verifies: " + "; ".join(layer_verification["errors"]))
+        layer_report = read_json(mask_layer_path)
+        layer_rows = {row["view_id"]: row for row in layer_report.get("views") or [] if isinstance(row, dict)}
     if any(row.get("review_round") != index // 4 + 1 or row.get("review_position") != index % 4 + 1 for index, row in enumerate(rows) if isinstance(row, dict)):
         errors.append("fused views do not follow the four-quadrant review order")
     for row in rows:
@@ -277,6 +286,12 @@ def validate_comparison_report(path: Path) -> dict[str, Any]:
                 errors.append(f"{row.get('view_id')} has invalid {gate} review status")
         if review.get("status") == "pass" and any((review.get(gate) or {}).get("status") != "pass" for gate in ("mask_scale", "coordinate_color")):
             errors.append(f"{row.get('view_id')} overall pass requires both fused sub-gates to pass")
+        numeric = mask_scale.get("numeric_edge") if isinstance(mask_scale.get("numeric_edge"), dict) else {}
+        source_layer = layer_rows.get(row.get("view_id"))
+        if source_layer is None or any(mask_scale.get(field) != source_layer.get(field) for field in ("canvas", "reference_mask_bbox_px", "model_mask_bbox_px", "numeric_edge", "evidence")):
+            errors.append(f"{row.get('view_id')} fused mask/scale evidence does not match the source report")
+        if (review.get("mask_scale") or {}).get("status") == "pass" and numeric.get("numeric_gate") != "pass":
+            errors.append(f"{row.get('view_id')} mask_scale cannot pass before numeric silhouette equality")
         for name, evidence in (row.get("evidence") or {}).items():
             evidence_path = Path(str(evidence.get("path", ""))).expanduser().resolve()
             if not evidence_path.is_file() or sha256(evidence_path) != evidence.get("sha256"):

@@ -1,9 +1,9 @@
 ---
 name: video-to-3d
-description: Turn a single-character A-pose orbit video or an approved whole multi-view character sheet into an editable Blender model using the local MiniMax H3 MAIN and H3 IR turntable generation when needed, measured 8-72 angle evidence, calibrated reference cameras, fused per-angle mask/scale and coordinate/color refinement, source-backed retopology and Blender lookdev/QA, and every-angle beauty review. Use for fixed-subject character turntables and Blender reconstruction; do not use for action footage, moving subjects, direct neural-mesh generation, or photogrammetry capture.
+description: Turn a single-character A-pose orbit video or an approved whole multi-view character sheet into an editable Blender model using local MiniMax H3 MAIN/H3 IR generation when needed, measured 8-72 angle evidence, calibrated Blender overlays, numerical per-angle silhouette-edge fitting, fused mask/scale/color refinement, and final 3D/beauty review. Use for fixed-subject character turntables and Blender reconstruction; do not use for action footage, moving subjects, direct neural-mesh generation, or photogrammetry capture.
 license: MIT
 metadata:
-  version: 1.8.0
+  version: 1.9.0
   default_angles: 24
   tested_blender: 5.1.0
 ---
@@ -26,15 +26,17 @@ cameras, reference images, model parts, and review evidence remain inspectable a
   against the corresponding reference at every admitted angle.
 - At every admitted angle, place the visually approved reference-character mask and Blender render
   alpha mask on the same-sized canvas at identical pixel coordinates. Show overlap, reference-only,
-  and model-only pixels; leave interpretation and repair decisions to the Agent.
+  and model-only pixels. Calculate complete scanline edge constraints before visual judgment.
+- Numerical silhouette fitting is mandatory during modeling. A 100% silhouette pass means XOR=0,
+  IoU=1, bbox delta=0, and every horizontal/vertical edge delta=0 on every admitted angle.
 - For each angle, review mask/scale/position and coordinate/color/material evidence together before
   advancing. Never finish all mask angles first and postpone color to a separate batch.
 - Never model or review in adjacent circular order. Use four-quadrant rounds: four views separated by
   90 degrees per round, beginning with cardinals, then diagonals, then interleaved intermediate rounds.
 - Treat retopology and Blender aesthetic/QA as two independent Step 8 gates. Rerun fused evidence
   after topology, material, UV, normal, or visible look changes.
-- Finish with a full-resolution beauty audit across every angle. Numeric checks support but never
-  replace visual judgment.
+- Finish with both exact numerical silhouette gates and a full-resolution visual beauty audit.
+  Neither substitutes for the other.
 - Do not route geometry generation through IMG2 Three.js, a neural 3D service, a point cloud, a
   splat, or independent per-frame meshes.
 
@@ -241,8 +243,20 @@ python scripts/occlusion_mask_test.py compare `
   --out <work>\step6-mask-layers
 ```
 
-These mask layers are evidence inputs for Step 7. Do not approve every mask as a separate batch
-before looking at color.
+For every angle the command writes `numeric-edge-constraints.json` containing:
+
+- reference/model left-right edges and every foreground-run boundary for each occupied horizontal scanline;
+- reference/model top-bottom edges and every foreground-run boundary for each occupied vertical scanline;
+- signed edge deltas using `model - reference`, plus the required negative correction;
+- pixel corrections converted to Blender camera-local/world units from that camera's orthographic
+  scale; image `+Y` points down, so applying a vertical correction reverses its sign in camera `+Y`;
+- bbox deltas, width/height ratios, XOR pixels, IoU, and mean/P95/maximum edge error.
+
+Use these values to move the relevant shared-model vertices or parts directly toward the reference
+edge. Rerender and recompute after every retained adjustment. Do not mark the numerical gate pass
+until `silhouette_exact_match=true`, `xor_pixels=0`, `iou=1.0`, `bbox_delta_px=[0,0,0,0]`, and
+`edge_error.max_abs_px=0`. These mask layers and numbers are evidence inputs for Step 7; do not
+approve every mask as a separate batch before looking at color.
 
 ## 7. Fuse mask/scale and coordinate/color refinement per angle
 
@@ -262,12 +276,12 @@ python scripts/fused_multiview_compare.py compare `
 
 The script produces one six-panel fused image per `view_id`: mask overlap, mask on reference,
 reference color, model color, 50/50 color overlay, and amplified color difference. It retains the
-standalone evidence and does not score similarity or decide what to repair.
+exact numerical silhouette gate but does not score color similarity or decide the 3D repair.
 
 Process views in the same four-quadrant rounds; within each round, treat each angle as one fused unit:
 
-1. Read the red/blue mask edges and repair shared scale, position, silhouette, missing volume, or
-   extra volume without moving the calibrated camera.
+1. Read the numerical edge file first. Apply its signed pixel/world-unit corrections to shared scale,
+   position, silhouette, missing volume, or extra volume without moving the calibrated camera.
 2. On that same angle, compare feature coordinates and value/color blocks for skin, hair, eyes,
    costume, armor, and accessories.
 3. Correct materials and visible details without hiding geometry errors with lighting or texture.
@@ -279,9 +293,13 @@ The report is `fused-multiview-comparison.json`. A view cannot pass while either
 pending or failed. A round cannot close until all four angles agree. Never review all mask panels
 first, all color panels afterward, or traverse `0°, 15°, 30°...` as the primary modeling sequence.
 
-Concept art and a Blender render need not be literally pixel-identical when their lighting model or
-stylization differs. "Pass" means the Agent has explained or corrected every material difference
-relevant to the requested model; do not claim mathematical equality from a visual overlay.
+Never force one angle to 100% with camera-specific geometry, a per-camera shape key, hidden mesh, or
+independent 2D warp. All numerical corrections must modify the same shared 3D model and preserve
+previously closed quadrant rounds. If inconsistent references make simultaneous zero error
+impossible, fail with the conflicting view IDs instead of reporting a false 100% match.
+
+The binary silhouette gate is exact. Color pixels need not be literally identical when the lighting
+model or stylization differs; color remains a separately explained visual/material judgment.
 
 For anime/NPR characters, load `$build-anime-npr-character` as a part-craft supplement when
 available. Its artistic part gates supplement this workflow; the measured cameras and every-angle

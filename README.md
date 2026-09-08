@@ -14,6 +14,7 @@ lookdev as separate review gates.
 - Audits uniform rotation against observed source frames and SHA-256 evidence.
 - Imports all 8-72 views as calibrated non-rendering Blender overlays before modeling (24 by default).
 - Reviews four opposing 90-degree views per round instead of walking through adjacent angles.
+- Emits full scanline edge coordinates and pixel/world-unit corrections; silhouette pass requires zero numeric error.
 - Produces one fused mask/scale/coordinate/colour review for every angle, plus final review artifacts.
 - Rejects per-camera geometry, silent angle reduction, neural-mesh substitution, and unsupported quality claims.
 

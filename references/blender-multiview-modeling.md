@@ -49,12 +49,18 @@ mask directly over its same-`view_id` reference mask on one same-sized, same-coo
 
 The overlay is deliberately simple: green means both layers cover the pixel, red means the reference
 layer only, and blue means the model layer only. The tool also draws the two bboxes so scale and
-position differences are visible. It does not score the result, identify a part, rank an error, or
-choose a repair.
+position differences are visible. It measures exact edge error but does not identify a body part or
+choose a 3D repair.
 
 The Agent inspects the overlay, compares neighboring yaws, decides whether shared scale or geometry
 must change, edits the model, and rerenders. Treat a faulty segmentation mask as an input problem:
 correct and re-admit the mask rather than changing the model to fit bad evidence.
+
+Do not estimate edge displacement by eye when numerical constraints are available. For each camera,
+use the scanline report's signed edge deltas and required world-unit corrections to move the shared
+model toward the reference. Recompute after each adjustment. Exact silhouette closure requires zero
+XOR, IoU 1, zero bbox delta, and zero maximum edge error across all four views in the current round.
+Visual review remains mandatory for anatomy, topology, depth, part identity, and bad-mask detection.
 
 ## Per-angle fused mask/scale and coordinate/color refinement gate
 
@@ -70,7 +76,7 @@ For every angle, inspect the six-panel fused artifact before advancing. Repair i
 4. UV/texture placement and reference-visible secondary details.
 
 Do not move calibrated cameras, rescale one angle, or use lighting/texture to conceal a geometry
-problem. The tool does not score or diagnose the images. Both nested gates and the overall view must
+problem. The tool enforces exact silhouette numbers but does not score color or diagnose materials. Both nested gates and the overall view must
 pass; rerender affected neighboring angles after every retained change.
 
 ## Retained milestone gates

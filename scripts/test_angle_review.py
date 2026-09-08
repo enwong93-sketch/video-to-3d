@@ -25,6 +25,14 @@ class AngleReviewTests(unittest.TestCase):
                 source.write_text(name, encoding="utf-8")
                 inputs[name] = {"path": str(source), "sha256": angle_review.sha256(source)}
             layer_evidence = {"mask_layer_overlay": evidence_record, "mask_layer_overlay_on_reference": evidence_record}
+            numeric_edge = {
+                "numeric_gate": "pass",
+                "silhouette_exact_match": True,
+                "xor_pixels": 0,
+                "iou": 1.0,
+                "bbox_delta_px": [0, 0, 0, 0],
+                "edge_error": {"max_abs_px": 0},
+            }
             review_indices = [0, 2, 4, 6, 1, 3, 5, 7]
             layer_rows = [
                 {
@@ -34,6 +42,7 @@ class AngleReviewTests(unittest.TestCase):
                     "canvas": {"width": 100, "height": 200, "origin": "top-left", "coordinates": "identical"},
                     "reference_mask_bbox_px": [10, 10, 90, 190],
                     "model_mask_bbox_px": [10, 10, 90, 190],
+                    "numeric_edge": numeric_edge,
                     "evidence": layer_evidence,
                     "agent_review": {"status": "pass", "notes": "unit fixture"},
                 }
@@ -68,6 +77,7 @@ class AngleReviewTests(unittest.TestCase):
                         "canvas": layer_rows[review_index]["canvas"],
                         "reference_mask_bbox_px": layer_rows[review_index]["reference_mask_bbox_px"],
                         "model_mask_bbox_px": layer_rows[review_index]["model_mask_bbox_px"],
+                        "numeric_edge": numeric_edge,
                         "evidence": layer_evidence,
                     },
                     "evidence": color_evidence,
@@ -113,6 +123,7 @@ class AngleReviewTests(unittest.TestCase):
                             "canvas": layer_rows[review_index]["canvas"],
                             "reference_mask_bbox_px": layer_rows[review_index]["reference_mask_bbox_px"],
                             "model_mask_bbox_px": layer_rows[review_index]["model_mask_bbox_px"],
+                            "numeric_edge": numeric_edge,
                             "evidence": layer_evidence,
                         },
                         "coordinate_color": {

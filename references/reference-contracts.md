@@ -121,7 +121,7 @@ because the source itself is cropped.
 
 ## Same-coordinate model/reference mask layers
 
-`mask-layer-comparison.json` uses schema `video-to-3d/mask-layer-comparison/v2` and binds the
+`mask-layer-comparison.json` uses schema `video-to-3d/mask-layer-comparison/v3` and binds the
 reference set, alignment, render report, and admitted mask manifest by hash. For each `view_id`, the
 tool places exactly two binary layers on one canvas:
 
@@ -142,15 +142,24 @@ The companion `mask-layer-overlay-on-reference.png` places the same colors over 
 draws the two layer bounding boxes so scale/position differences remain easy to see. The report
 stores canvas identity, both raw bboxes, output paths and hashes, plus an empty Agent review field.
 
-The comparison tool does not calculate a similarity score, set a quality threshold, rank regions,
-name a defective body part, or prescribe a repair. The Agent inspects the two-layer image, decides
+Each view also binds `numeric-edge-constraints.json` with schema
+`video-to-3d/numeric-edge-constraints/v1`. It records every occupied horizontal scanline's left/right
+edges, every occupied vertical scanline's top/bottom edges, signed pixel deltas, required corrections
+in pixels and Blender world units, bbox deltas, size ratios, XOR, IoU, and edge-error statistics.
+`model_edge_minus_reference_edge` is the delta convention; the required correction is its negative. A numerical pass
+requires exact binary-mask equality, not a thresholded similarity score.
+Pixel `+X` maps to camera-local `+X`; pixel `+Y` maps to camera-local `-Y`, so vertical Blender
+camera-axis corrections reverse the image-axis sign recorded beside them.
+
+The comparison tool calculates exact silhouette equality and edge corrections, but does not rank
+regions, name a defective body part, or prescribe a 3D repair. The Agent uses the numbers and image, decides
 whether scale or geometry differs, checks neighboring angles, performs the repair, and records
 `mask_layer_match` as `pass` or `fail` in the independent final review.
 
 ## Fused same-angle mask, scale, coordinate, and color review
 
 `fused-multiview-comparison.json` uses schema
-`video-to-3d/fused-multiview-comparison/v1`. It is bound by SHA-256 to the reference set,
+`video-to-3d/fused-multiview-comparison/v2`. It is bound by SHA-256 to the reference set,
 alignment, Blender render report, and Step 6 mask-layer report. Pending mask review does not block
 generation because every angle is judged jointly in the fused report.
 
@@ -167,9 +176,9 @@ The tool writes:
 - an amplified absolute RGB difference image;
 - one six-panel fused mask/scale/reference/model/overlay/difference image.
 
-The report stores the shared canvas, mask boxes, background color, paths, hashes, and one Agent review
+The report stores the shared canvas, mask boxes, numerical edge gate, background color, paths, hashes, and one Agent review
 with nested `mask_scale` and `coordinate_color` gates. The overall row may pass only when both nested
-gates pass. It produces no similarity score, automatic verdict, diagnosis, or repair prescription.
+gates pass. It produces no color-similarity score, material diagnosis, or 3D repair prescription.
 The Agent repairs the shared model and rerenders the angle plus its neighbors before advancing.
 
 ## Evidence meaning

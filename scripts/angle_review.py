@@ -31,8 +31,8 @@ from occlusion_mask_test import (
 REFERENCE_SCHEMA = "video-to-3d/reference-set/v2"
 ALIGNMENT_SCHEMA = "video-to-3d/alignment/v1"
 RENDER_SCHEMA = "video-to-3d/render-set/v1"
-REVIEW_SCHEMA = "video-to-3d/every-angle-review/v4"
-REPORT_SCHEMA = "video-to-3d/every-angle-verification/v4"
+REVIEW_SCHEMA = "video-to-3d/every-angle-review/v5"
+REPORT_SCHEMA = "video-to-3d/every-angle-verification/v5"
 GATES = (
     "mask_layer_match",
     "coordinate_color_match",
@@ -193,6 +193,7 @@ def prepare(args: argparse.Namespace) -> int:
                     "canvas": mask_layer_rows[view_id]["canvas"],
                     "reference_mask_bbox_px": mask_layer_rows[view_id]["reference_mask_bbox_px"],
                     "model_mask_bbox_px": mask_layer_rows[view_id]["model_mask_bbox_px"],
+                    "numeric_edge": mask_layer_rows[view_id]["numeric_edge"],
                     "evidence": mask_layer_rows[view_id]["evidence"],
                 },
                 "coordinate_color": {
@@ -311,7 +312,7 @@ def verify(args: argparse.Namespace) -> int:
         embedded_layers = row.get("mask_layers") if isinstance(row.get("mask_layers"), dict) else {}
         if view_id in mask_layer_rows:
             source_layers = mask_layer_rows[view_id]
-            for field in ("canvas", "reference_mask_bbox_px", "model_mask_bbox_px", "evidence"):
+            for field in ("canvas", "reference_mask_bbox_px", "model_mask_bbox_px", "numeric_edge", "evidence"):
                 if embedded_layers.get(field) != source_layers.get(field):
                     errors.append(f"{view_id} embedded mask-layer {field} does not match the source report")
         embedded_color = row.get("coordinate_color") if isinstance(row.get("coordinate_color"), dict) else {}
@@ -334,6 +335,8 @@ def verify(args: argparse.Namespace) -> int:
         for name in GATES:
             if (row.get("gates") or {}).get(name, {}).get("status") != "pass":
                 errors.append(f"{view_id} gate {name} is not pass")
+        if (row.get("gates") or {}).get("mask_layer_match", {}).get("status") == "pass" and (embedded_layers.get("numeric_edge") or {}).get("numeric_gate") != "pass":
+            errors.append(f"{view_id} mask_layer_match cannot pass before numeric silhouette equality")
         for name, evidence in (row.get("evidence") or {}).items():
             evidence_path = Path(str(evidence.get("path", ""))).expanduser().resolve()
             if not evidence_path.is_file() or sha256(evidence_path) != evidence.get("sha256"):

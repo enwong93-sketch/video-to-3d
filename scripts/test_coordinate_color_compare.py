@@ -39,7 +39,7 @@ class CoordinateColorTests(unittest.TestCase):
         reference_path = root / "reference-set.json"
         reference_path.write_text(json.dumps({"schema": mask_test.REFERENCE_SCHEMA, "views": views}), encoding="utf-8")
         alignment_path = root / "alignment.json"
-        alignment_path.write_text(json.dumps({"schema": mask_test.ALIGNMENT_SCHEMA, "reference_set_sha256": color_test.sha256(reference_path), "views": alignments}), encoding="utf-8")
+        alignment_path.write_text(json.dumps({"schema": mask_test.ALIGNMENT_SCHEMA, "reference_set_sha256": color_test.sha256(reference_path), "target_height_m": 1.7, "views": alignments}), encoding="utf-8")
         render_path = root / "render-report.json"
         render_path.write_text(json.dumps({"schema": mask_test.RENDER_SCHEMA, "reference_set_sha256": color_test.sha256(reference_path), "alignment_sha256": color_test.sha256(alignment_path), "resolution_percentage": 100, "renders": render_rows}), encoding="utf-8")
         masks_out = root / "reference-masks"

@@ -40,7 +40,7 @@ class MaskLayerTests(unittest.TestCase):
         reference_path = root / "reference-set.json"
         reference_path.write_text(json.dumps({"schema": mask_test.REFERENCE_SCHEMA, "views": views}), encoding="utf-8")
         alignment_path = root / "alignment.json"
-        alignment_path.write_text(json.dumps({"schema": mask_test.ALIGNMENT_SCHEMA, "reference_set_sha256": mask_test.sha256(reference_path), "views": alignment_views}), encoding="utf-8")
+        alignment_path.write_text(json.dumps({"schema": mask_test.ALIGNMENT_SCHEMA, "reference_set_sha256": mask_test.sha256(reference_path), "target_height_m": 1.7, "views": alignment_views}), encoding="utf-8")
         render_path = root / "render-report.json"
         render_path.write_text(json.dumps({"schema": mask_test.RENDER_SCHEMA, "reference_set_sha256": mask_test.sha256(reference_path), "alignment_sha256": mask_test.sha256(alignment_path), "resolution_percentage": 100, "renders": render_rows}), encoding="utf-8")
         masks_dir = root / "reference-masks"
@@ -82,6 +82,11 @@ class MaskLayerTests(unittest.TestCase):
             self.assertTrue(np.any(np.all(colors == (40, 220, 90), axis=2)))
             self.assertFalse(np.any(np.all(colors == (245, 65, 65), axis=2)))
             self.assertFalse(np.any(np.all(colors == (55, 125, 245), axis=2)))
+            numeric = report["views"][0]["numeric_edge"]
+            self.assertEqual(numeric["numeric_gate"], "pass")
+            self.assertEqual(numeric["xor_pixels"], 0)
+            self.assertEqual(numeric["iou"], 1.0)
+            self.assertEqual(numeric["edge_error"]["max_abs_px"], 0)
             self.assertEqual(mask_test.validate_comparison_report(report_path)["status"], "pass")
 
     def test_changed_layer_shows_reference_only_and_model_only(self) -> None:
@@ -95,7 +100,41 @@ class MaskLayerTests(unittest.TestCase):
             self.assertEqual(target["agent_review"]["status"], "pending")
             self.assertNotIn("repair_targets", target)
             self.assertNotIn("metrics", target)
+            self.assertEqual(target["numeric_edge"]["numeric_gate"], "fail")
+            self.assertGreater(target["numeric_edge"]["xor_pixels"], 0)
             self.assertEqual(mask_test.validate_comparison_report(report_path)["status"], "pass")
+
+            target["agent_review"]["status"] = "pass"
+            report_path.write_text(json.dumps(report), encoding="utf-8")
+            verification = mask_test.validate_comparison_report(report_path)
+            self.assertEqual(verification["status"], "fail")
+            self.assertTrue(any("numeric silhouette equality" in error for error in verification["errors"]))
+
+            target["numeric_edge"].update({
+                "numeric_gate": "pass",
+                "silhouette_exact_match": True,
+                "xor_pixels": 0,
+                "iou": 1.0,
+                "bbox_delta_px": [0, 0, 0, 0],
+                "edge_error": {"max_abs_px": 0},
+            })
+            report_path.write_text(json.dumps(report), encoding="utf-8")
+            verification = mask_test.validate_comparison_report(report_path)
+            self.assertTrue(any("numeric summary does not match" in error for error in verification["errors"]))
+
+    def test_known_three_pixel_shift_returns_direct_correction(self) -> None:
+        reference = np.zeros((20, 30), dtype=bool)
+        reference[4:16, 5:15] = True
+        shifted = np.zeros_like(reference)
+        shifted[4:16, 8:18] = True
+        measured = mask_test.numeric_edge_constraints(reference, shifted, 0.01)
+        self.assertEqual(measured["bbox_delta_px"], [3, 0, 3, 0])
+        self.assertEqual(measured["bbox_required_correction_px"], [-3, 0, -3, 0])
+        self.assertEqual(measured["bbox_required_correction_world"], [-0.03, 0.0, -0.03, 0.0])
+        self.assertEqual(measured["edge_error"]["max_abs_px"], 3)
+        self.assertEqual(measured["numeric_gate"], "fail")
+        corrected = mask_test.numeric_edge_constraints(reference, reference.copy(), 0.01)
+        self.assertEqual(corrected["numeric_gate"], "pass")
 
     def test_simple_layering_scales_to_72_angles(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
