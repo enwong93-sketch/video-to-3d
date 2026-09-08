@@ -10,6 +10,10 @@ import json
 import sys
 from pathlib import Path
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
 import bpy
 
 from artifact_safety import safe_output_path, validate_image_size, validate_view_ids

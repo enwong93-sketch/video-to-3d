@@ -93,6 +93,8 @@ Continue with one row for every admitted view. Use one global `target_height_m`;
 exist only to detect documented scale drift and must remain within the configured limit. The Blender
 setup computes each orthographic scale from the image height and its subject box, solves camera shift
 to place the shared model origin at the observed subject center, and records the residual.
+`background_alpha` must be 0.05-0.95. The setup imports every view as a `FRONT`/`FIT`, non-rendering
+camera reference overlay so the image can be read directly over the model while shaping it.
 
 ## Reference-character masks
 

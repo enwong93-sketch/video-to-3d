@@ -12,6 +12,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
 import bpy
 from bpy_extras.object_utils import world_to_camera_view
 from mathutils import Vector
@@ -21,9 +25,11 @@ from artifact_safety import read_json_limited, validate_image_size, validate_vie
 
 REFERENCE_SCHEMA = "video-to-3d/reference-set/v2"
 ALIGNMENT_SCHEMA = "video-to-3d/alignment/v1"
-SETUP_SCHEMA = "video-to-3d/blender-reference-setup/v1"
+SETUP_SCHEMA = "video-to-3d/blender-reference-setup/v2"
 MIN_ANGLES = 8
 MAX_ANGLES = 72
+REFERENCE_LAYER_DEPTH = "FRONT"
+REFERENCE_LAYER_FRAME_METHOD = "FIT"
 
 
 class SetupError(RuntimeError):
@@ -73,6 +79,7 @@ def load_contract(reference_path: Path, alignment_path: Path) -> tuple[dict[str,
         target_center_z = float(alignment.get("target_center_z_m", target_height / 2.0))
         camera_distance = float(alignment.get("camera_distance_m", max(6.0, target_height * 4.0)))
         drift_limit = float(alignment.get("max_target_height_drift_pct", 1.0))
+        background_alpha = float(alignment.get("background_alpha", 0.65))
     except (KeyError, TypeError, ValueError) as exc:
         raise SetupError("alignment requires numeric target_height_m and valid camera settings") from exc
     if not 0.05 <= target_height <= 100.0:
@@ -81,6 +88,8 @@ def load_contract(reference_path: Path, alignment_path: Path) -> tuple[dict[str,
         raise SetupError("target center and camera distance must be finite; distance must be positive")
     if not 0 <= drift_limit <= 5.0:
         raise SetupError("max_target_height_drift_pct must be between 0 and 5")
+    if not 0.05 <= background_alpha <= 0.95:
+        raise SetupError("background_alpha must be between 0.05 and 0.95 for usable overlays")
 
     aligned_rows = alignment.get("views") if isinstance(alignment.get("views"), list) else []
     aligned_by_id = {row.get("view_id"): row for row in aligned_rows if isinstance(row, dict)}
@@ -198,6 +207,8 @@ def build_scene(reference_path: Path, alignment_path: Path, blend_out: Path, cle
     scene["v3d_alignment"] = str(alignment_path)
     scene["v3d_alignment_sha256"] = sha256(alignment_path)
     scene["v3d_view_count"] = len(calibrated)
+    scene["v3d_reference_layer_count"] = len(calibrated)
+    scene["v3d_reference_overlay_mode"] = "camera_background_front_alpha"
     scene["v3d_target_height_m"] = float(alignment["target_height_m"])
     scene.render.resolution_percentage = 100
     camera_rows: list[dict[str, Any]] = []
@@ -227,8 +238,8 @@ def build_scene(reference_path: Path, alignment_path: Path, blend_out: Path, cle
         background = camera_data.background_images.new()
         background.image = image
         background.alpha = float(alignment.get("background_alpha", 0.65))
-        background.display_depth = "BACK"
-        background.frame_method = "FIT"
+        background.display_depth = REFERENCE_LAYER_DEPTH
+        background.frame_method = REFERENCE_LAYER_FRAME_METHOD
         background.scale = 1.0
         background.offset = (0.0, 0.0)
         camera["v3d_view_id"] = row["view_id"]
@@ -236,6 +247,8 @@ def build_scene(reference_path: Path, alignment_path: Path, blend_out: Path, cle
         camera["v3d_timestamp_seconds"] = row["timestamp_seconds"]
         camera["v3d_reference_path"] = str(row["image"])
         camera["v3d_reference_sha256"] = row["image_sha256"]
+        camera["v3d_reference_layer_required"] = True
+        camera["v3d_reference_layer_non_rendering"] = True
         camera["v3d_subject_bbox_px"] = row["bbox"]
         camera["v3d_target_height_m"] = row["target_height_m"]
         camera["v3d_alignment_residual_px"] = residual_px
@@ -250,6 +263,13 @@ def build_scene(reference_path: Path, alignment_path: Path, blend_out: Path, cle
                 "yaw_deg": row["yaw_deg"],
                 "reference": str(row["image"]),
                 "reference_sha256": row["image_sha256"],
+                "reference_layer": {
+                    "kind": "camera_background_image",
+                    "display_depth": REFERENCE_LAYER_DEPTH,
+                    "alpha": float(background.alpha),
+                    "frame_method": REFERENCE_LAYER_FRAME_METHOD,
+                    "non_rendering": True,
+                },
                 "subject_bbox_px": row["bbox"],
                 "ortho_scale": row["ortho_scale"],
                 "shift_x": shift_x,
@@ -273,6 +293,8 @@ def build_scene(reference_path: Path, alignment_path: Path, blend_out: Path, cle
         "alignment_sha256": sha256(alignment_path),
         "target_height_m": float(alignment["target_height_m"]),
         "view_count": len(camera_rows),
+        "reference_layer_count": len(camera_rows),
+        "reference_overlay_mode": "camera_background_front_alpha",
         "cameras": camera_rows,
     }
 
@@ -287,6 +309,10 @@ def verify_scene(reference_path: Path, alignment_path: Path) -> dict[str, Any]:
         errors.append("scene reference-set hash does not match")
     if scene.get("v3d_alignment_sha256") != sha256(alignment_path):
         errors.append("scene alignment hash does not match")
+    if int(scene.get("v3d_reference_layer_count", 0)) != len(calibrated):
+        errors.append("scene reference-layer count does not match the admitted views")
+    if scene.get("v3d_reference_overlay_mode") != "camera_background_front_alpha":
+        errors.append("scene reference-overlay mode is missing or unsupported")
     cameras = [obj for obj in bpy.data.objects if obj.type == "CAMERA" and obj.get("v3d_view_id")]
     by_id = {obj.get("v3d_view_id"): obj for obj in cameras}
     if len(cameras) != len(calibrated) or set(by_id) != {row["view_id"] for row in calibrated}:
@@ -302,6 +328,12 @@ def verify_scene(reference_path: Path, alignment_path: Path) -> dict[str, Any]:
             background_path = None
         else:
             background_path = Path(bpy.path.abspath(backgrounds[0].image.filepath)).resolve()
+            if backgrounds[0].display_depth != REFERENCE_LAYER_DEPTH:
+                errors.append(f"{row['view_id']} reference layer is not a front alpha overlay")
+            if backgrounds[0].frame_method != REFERENCE_LAYER_FRAME_METHOD:
+                errors.append(f"{row['view_id']} reference layer does not use FIT framing")
+            if abs(float(backgrounds[0].alpha) - float(alignment.get("background_alpha", 0.65))) > 1e-6:
+                errors.append(f"{row['view_id']} reference-layer alpha has drifted")
         path = Path(str(camera.get("v3d_reference_path", ""))).expanduser().resolve()
         if not path.is_file() or sha256(path) != camera.get("v3d_reference_sha256"):
             errors.append(f"{row['view_id']} reference image is missing or changed")
@@ -309,6 +341,10 @@ def verify_scene(reference_path: Path, alignment_path: Path) -> dict[str, Any]:
             errors.append(f"{row['view_id']} loaded background does not match its recorded reference")
         if camera.name not in bpy.data.collections["V3D_REFERENCES"].objects:
             errors.append(f"{row['view_id']} camera is outside V3D_REFERENCES")
+        if camera.name in bpy.data.collections["V3D_MODEL"].objects:
+            errors.append(f"{row['view_id']} reference camera is mixed into V3D_MODEL")
+        if not camera.get("v3d_reference_layer_required") or not camera.get("v3d_reference_layer_non_rendering"):
+            errors.append(f"{row['view_id']} reference-layer contract is missing")
         if abs(float(camera.get("v3d_target_yaw_deg", 999.0)) - row["yaw_deg"]) > 1e-6:
             errors.append(f"{row['view_id']} yaw label has drifted")
         if abs(float(camera.data.ortho_scale) - row["ortho_scale"]) > 1e-6:
@@ -333,6 +369,13 @@ def verify_scene(reference_path: Path, alignment_path: Path) -> dict[str, Any]:
                 "camera": camera.name,
                 "reference": str(path),
                 "reference_sha256": camera.get("v3d_reference_sha256"),
+                "reference_layer": {
+                    "kind": "camera_background_image",
+                    "display_depth": backgrounds[0].display_depth if len(backgrounds) == 1 else None,
+                    "alpha": float(backgrounds[0].alpha) if len(backgrounds) == 1 else None,
+                    "frame_method": backgrounds[0].frame_method if len(backgrounds) == 1 else None,
+                    "non_rendering": True,
+                },
                 "ortho_scale": float(camera.data.ortho_scale),
                 "shift_x": float(camera.data.shift_x),
                 "shift_y": float(camera.data.shift_y),
@@ -347,7 +390,7 @@ def verify_scene(reference_path: Path, alignment_path: Path) -> dict[str, Any]:
         if max(abs(float(value)) for value in (*root.location, *root.rotation_euler)) > 1e-7 or max(abs(float(value) - 1.0) for value in root.scale) > 1e-7:
             errors.append("V3D_MODEL_ROOT transform is not identity")
     return {
-        "schema": "video-to-3d/blender-reference-verification/v1",
+        "schema": "video-to-3d/blender-reference-verification/v2",
         "checked_at": now_utc(),
         "status": "pass" if not errors else "fail",
         "blend": str(Path(bpy.data.filepath).resolve()) if bpy.data.filepath else "",
@@ -356,6 +399,8 @@ def verify_scene(reference_path: Path, alignment_path: Path) -> dict[str, Any]:
         "alignment": str(alignment_path),
         "target_height_m": float(alignment["target_height_m"]),
         "view_count": len(camera_rows),
+        "reference_layer_count": len(camera_rows),
+        "reference_overlay_mode": scene.get("v3d_reference_overlay_mode"),
         "cameras": camera_rows,
         "errors": errors,
     }

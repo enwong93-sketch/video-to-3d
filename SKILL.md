@@ -3,7 +3,7 @@ name: video-to-3d
 description: Turn a single-character A-pose orbit video or an approved whole multi-view character sheet into an editable Blender model using the local MiniMax H3 MAIN and H3 IR turntable generation when needed, measured 8-72 angle evidence, calibrated reference cameras, fused per-angle mask/scale and coordinate/color refinement, source-backed retopology and Blender lookdev/QA, and every-angle beauty review. Use for fixed-subject character turntables and Blender reconstruction; do not use for action footage, moving subjects, direct neural-mesh generation, or photogrammetry capture.
 license: MIT
 metadata:
-  version: 1.7.0
+  version: 1.7.1
   default_angles: 24
   tested_blender: 5.1.0
 ---
@@ -139,11 +139,17 @@ python scripts/turntable_reference.py verify `
 Any failed or pending source gate is a hard stop. A valid manifest or green extraction command is not
 visual acceptance.
 
-## 4. Import all angles, calibrate cameras, and build the shared rough model
+## 4. Import every angle as a Blender overlay, calibrate cameras, and build the shared model
 
 Read [Blender multi-view modeling](references/blender-multiview-modeling.md). Create
 `alignment.json` with one full-resolution subject bounding box for every view and one global target
 height. Every view ID must be present exactly once.
+
+This import is a mandatory pre-modeling action, not optional setup. Load every admitted image into
+its matching Blender camera as a front-depth, alpha reference overlay. With the default 24 angles,
+the saved scene must contain 24 calibrated cameras and 24 visible reference overlays. Each overlay
+is non-rendering camera data in `V3D_REFERENCES`, never model geometry in `V3D_MODEL`, so it can sit
+visually over the character without intersecting or contaminating the mesh or final render.
 
 Create a new Blender project:
 
@@ -156,7 +162,7 @@ Create a new Blender project:
 ```
 
 The script creates `V3D_REFERENCES`, `V3D_MODEL`, `V3D_MODEL_ROOT`, one orthographic camera per real
-angle, one hashed camera background per view, and calibrated scale/shift metadata. Reopen the saved
+angle, one hashed front-depth alpha overlay per view, and calibrated scale/shift metadata. Reopen the saved
 file in a fresh Blender process and verify rather than trusting the save call:
 
 ```powershell
@@ -167,12 +173,19 @@ file in a fresh Blender process and verify rather than trusting the save call:
   --report <work>\blender-reopen-verification.json
 ```
 
-Only after the fresh reopen passes, build one shared rough model in `V3D_MODEL`, parented to
+Treat `view_count == reference_layer_count == admitted view count` as a hard gate. For 24 views this
+must read `24 == 24 == 24`, and every camera row must report `camera_background_image`, `FRONT`,
+`FIT`, the declared alpha, and `non_rendering: true`. Missing, hidden, stale, mismatched, or model-
+collection reference layers fail Step 4.
+
+Only after the fresh reopen passes, switch through every calibrated camera and confirm its reference
+is visibly superimposed over the model coordinate space. Then build one shared rough model in `V3D_MODEL`, parented to
 `V3D_MODEL_ROOT`. Read [Blender multi-view modeling](references/blender-multiview-modeling.md) and
 block the full character part by part: whole-body proportions, head/face/eyes, front-side-rear hair,
 torso and limbs, independent hands/fingers, independent feet/soles, costume, armor, and accessories.
 Use every admitted camera while shaping the same geometry. Do not make camera-specific meshes,
-per-view scale corrections, or a front-only mannequin and call the rough model complete.
+per-view scale corrections, or a front-only mannequin and call the rough model complete. Do not
+begin from an empty viewport and postpone importing the reference angles until the user asks.
 
 ## 5. Prepare reviewed reference masks
 

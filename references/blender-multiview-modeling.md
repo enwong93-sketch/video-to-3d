@@ -6,10 +6,23 @@ Read this file before creating geometry or changing a calibrated model project.
 
 - `V3D_REFERENCES` owns the calibrated orthographic cameras and their background images.
 - `V3D_MODEL` owns all model geometry; parent it to `V3D_MODEL_ROOT`.
+- Every admitted camera owns exactly one front-depth alpha reference overlay. It is non-rendering
+  camera data, not a plane or mesh, and remains outside `V3D_MODEL`.
+- The admitted view count, calibrated camera count, and reference-overlay count must be identical.
+  The default is 24/24/24; do not start modeling with missing overlays.
 - The root origin is the ground-center of the shared model. Use one global height and unit scale.
 - Do not move a reference camera, edit its shift/orthographic scale, crop a source image, or offset a
   model for one view after calibration. Rebuild the alignment contract if the source box was wrong.
 - Use the camera whose `v3d_view_id` matches the reference; never compare one yaw against another.
+
+## In-Blender overlay gate
+
+Before creating character geometry, switch through every calibrated camera and confirm that the
+matching source image is visibly superimposed at the calibrated scale and shift. The overlay uses
+front depth plus controlled alpha so reference edges and model edges can be read simultaneously;
+it must not render and must not intersect the character as geometry. Fresh reopen verification must
+confirm image hash, `FRONT` depth, `FIT` framing, alpha, collection isolation, and one overlay for
+every admitted `view_id`. Any failure blocks modeling.
 
 ## Per-angle two-layer mask gate
 

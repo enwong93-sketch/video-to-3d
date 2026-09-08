@@ -12,7 +12,7 @@ lookdev as separate review gates.
 - Accepts a static full-body A-pose orbit video or a whole Front/Back/Left/Right/Top character sheet.
 - Includes a reusable MiniMax H3 / H3D H3 IR prompt framework without pre-cutting the sheet.
 - Audits uniform rotation against observed source frames and SHA-256 evidence.
-- Builds 8-72 same-scale Blender reference cameras around one shared model origin.
+- Imports all 8-72 views as calibrated non-rendering Blender overlays before modeling (24 by default).
 - Produces one fused mask/scale/coordinate/colour review for every angle, plus final review artifacts.
 - Rejects per-camera geometry, silent angle reduction, neural-mesh substitution, and unsupported quality claims.
 
