@@ -140,17 +140,16 @@ name a defective body part, or prescribe a repair. The Agent inspects the two-la
 whether scale or geometry differs, checks neighboring angles, performs the repair, and records
 `mask_layer_match` as `pass` or `fail` in the independent final review.
 
-## Same-camera coordinate and color projection
+## Fused same-angle mask, scale, coordinate, and color review
 
-`coordinate-color-comparison.json` uses schema
-`video-to-3d/coordinate-color-comparison/v1`. It is bound by SHA-256 to the reference set,
-alignment, Blender render report, and completed Step 5 mask-layer report. Step 6 refuses to start
-until every Step 5 `agent_review.status` is `pass`.
+`fused-multiview-comparison.json` uses schema
+`video-to-3d/fused-multiview-comparison/v1`. It is bound by SHA-256 to the reference set,
+alignment, Blender render report, and Step 6 mask-layer report. Pending mask review does not block
+generation because every angle is judged jointly in the fused report.
 
-For every `view_id`, the reference subject and Blender render are projected onto the exact same
-camera-sized pixel canvas with the same top-left origin. The admitted reference mask removes the
-source background; the model alpha supplies the model layer. A single corner-derived neutral
-background is used for both projections so background pixels do not dominate color comparison.
+For every `view_id`, one six-panel artifact contains mask overlap, mask on reference, reference
+color, model color, 50/50 color overlay, and color difference on the same camera-sized pixel canvas.
+The admitted reference mask removes the source background; the model alpha supplies the model layer.
 
 The tool writes:
 
@@ -159,13 +158,12 @@ The tool writes:
 - a 50/50 layer overlay;
 - a fixed-coordinate checkerboard alternating reference and model tiles;
 - an amplified absolute RGB difference image;
-- a four-panel reference/model/overlay/difference image.
+- one six-panel fused mask/scale/reference/model/overlay/difference image.
 
-The report stores the shared canvas, background color, paths, hashes, and an empty Agent review field.
-It deliberately produces no color-similarity score, automatic match verdict, material diagnosis, or
-repair prescription. The Agent uses the images to refine shared geometry placement, material
-assignment, color/value blocks, roughness/specular response, texture placement, and reference-visible
-details, then records `coordinate_color_match` independently.
+The report stores the shared canvas, mask boxes, background color, paths, hashes, and one Agent review
+with nested `mask_scale` and `coordinate_color` gates. The overall row may pass only when both nested
+gates pass. It produces no similarity score, automatic verdict, diagnosis, or repair prescription.
+The Agent repairs the shared model and rerenders the angle plus its neighbors before advancing.
 
 ## Evidence meaning
 

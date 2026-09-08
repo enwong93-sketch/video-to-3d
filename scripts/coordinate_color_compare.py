@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Project reference and model color layers onto the same camera pixel coordinates for Agent review."""
+"""Fuse same-angle mask/scale and coordinate/color evidence for Agent review."""
 
 from __future__ import annotations
 
@@ -28,8 +28,8 @@ from occlusion_mask_test import (
 )
 
 
-COMPARE_SCHEMA = "video-to-3d/coordinate-color-comparison/v1"
-VERIFY_SCHEMA = "video-to-3d/coordinate-color-verification/v1"
+COMPARE_SCHEMA = "video-to-3d/fused-multiview-comparison/v1"
+VERIFY_SCHEMA = "video-to-3d/fused-multiview-verification/v1"
 
 
 class ColorCompareError(RuntimeError):
@@ -84,10 +84,10 @@ def checkerboard(reference: Image.Image, model: Image.Image, tile_size: int) -> 
     return Image.composite(reference, model, mask)
 
 
-def make_panel(reference: Image.Image, model: Image.Image, blend: Image.Image, difference: Image.Image, view_id: str) -> Image.Image:
-    images = [reference.convert("RGB"), model.convert("RGB"), blend.convert("RGB"), difference.convert("RGB")]
-    labels = ["reference projection", "model projection", "50/50 overlay", "absolute color difference"]
-    output = Image.new("RGB", (reference.width * 4, reference.height), "black")
+def make_panel(mask_layer: Image.Image, mask_context: Image.Image, reference: Image.Image, model: Image.Image, blend: Image.Image, difference: Image.Image, view_id: str) -> Image.Image:
+    images = [mask_layer.convert("RGB"), mask_context.convert("RGB"), reference.convert("RGB"), model.convert("RGB"), blend.convert("RGB"), difference.convert("RGB")]
+    labels = ["mask scale", "mask on reference", "reference color", "model color", "50/50 color", "color difference"]
+    output = Image.new("RGB", (reference.width * len(images), reference.height), "black")
     for index, image in enumerate(images):
         output.paste(image, (index * reference.width, 0))
         draw = ImageDraw.Draw(output)
@@ -134,12 +134,6 @@ def command_compare(args: argparse.Namespace) -> int:
     layer_rows = {row["view_id"]: row for row in mask_layers.get("views") or []}
     if not 8 <= len(views) <= 72 or set(views) != set(renders) or set(views) != set(masks) or set(views) != set(layer_rows):
         raise ColorCompareError("reference, render, mask, and layer reports must contain the same 8-72 view IDs")
-    incomplete_mask_reviews = [view_id for view_id, row in layer_rows.items() if (row.get("agent_review") or {}).get("status") != "pass"]
-    if incomplete_mask_reviews:
-        raise ColorCompareError(
-            "Step 5 mask-layer Agent review must pass before coordinate/color refinement: "
-            + ", ".join(sorted(incomplete_mask_reviews))
-        )
     factor = float(render.get("resolution_percentage", 100)) / 100.0
     if not 0 < factor <= 1:
         raise ColorCompareError("render resolution percentage must be greater than 0 and at most 100")
@@ -176,7 +170,16 @@ def command_compare(args: argparse.Namespace) -> int:
         difference = ImageChops.difference(reference_projection.convert("RGB"), model_projection.convert("RGB"))
         difference = difference.point(lambda value: min(255, value * 3))
         checker = checkerboard(reference_projection, model_projection, args.checker_size)
-        panel = make_panel(reference_projection, model_projection, blend, difference, view_id)
+        mask_evidence = layer_rows[view_id].get("evidence") or {}
+        mask_layer_path = Path(str((mask_evidence.get("mask_layer_overlay") or {}).get("path", ""))).expanduser().resolve()
+        mask_context_path = Path(str((mask_evidence.get("mask_layer_overlay_on_reference") or {}).get("path", ""))).expanduser().resolve()
+        with Image.open(mask_layer_path) as opened:
+            mask_layer_image = opened.convert("RGBA")
+        with Image.open(mask_context_path) as opened:
+            mask_context_image = opened.convert("RGBA")
+        if mask_layer_image.size != expected_size or mask_context_image.size != expected_size:
+            raise ColorCompareError(f"{view_id} mask and color evidence do not share one canvas")
+        panel = make_panel(mask_layer_image, mask_context_image, reference_projection, model_projection, blend, difference, view_id)
         validate_image_size(*expected_size, count=len(views), error_type=ColorCompareError)
         paths = {
             "reference_projection": safe_output_path(evidence_dir, f"{view_id}-reference-projection.png", error_type=ColorCompareError),
@@ -184,22 +187,33 @@ def command_compare(args: argparse.Namespace) -> int:
             "color_overlay_50_50": safe_output_path(evidence_dir, f"{view_id}-color-overlay-50-50.png", error_type=ColorCompareError),
             "color_difference": safe_output_path(evidence_dir, f"{view_id}-color-difference.png", error_type=ColorCompareError),
             "coordinate_checkerboard": safe_output_path(evidence_dir, f"{view_id}-coordinate-checkerboard.png", error_type=ColorCompareError),
-            "coordinate_color_panel": safe_output_path(evidence_dir, f"{view_id}-coordinate-color-panel.png", error_type=ColorCompareError),
+            "fused_mask_scale_color_panel": safe_output_path(evidence_dir, f"{view_id}-fused-mask-scale-color-panel.png", error_type=ColorCompareError),
         }
         reference_projection.save(paths["reference_projection"])
         model_projection.save(paths["model_projection"])
         blend.save(paths["color_overlay_50_50"])
         difference.save(paths["color_difference"])
         checker.save(paths["coordinate_checkerboard"])
-        panel.save(paths["coordinate_color_panel"])
+        panel.save(paths["fused_mask_scale_color_panel"])
         rows.append(
             {
                 "view_id": view_id,
                 "yaw_deg": float(view["target_yaw_deg"]),
                 "canvas": {"width": expected_size[0], "height": expected_size[1], "origin": "top-left", "coordinates": "identical-camera-projection"},
                 "background_rgb": list(background_rgb),
+                "mask_scale": {
+                    "canvas": layer_rows[view_id].get("canvas"),
+                    "reference_mask_bbox_px": layer_rows[view_id].get("reference_mask_bbox_px"),
+                    "model_mask_bbox_px": layer_rows[view_id].get("model_mask_bbox_px"),
+                    "evidence": mask_evidence,
+                },
                 "evidence": {name: {"path": str(path), "sha256": sha256(path)} for name, path in paths.items()},
-                "agent_review": {"status": "pending", "notes": ""},
+                "agent_review": {
+                    "status": "pending",
+                    "mask_scale": {"status": "pending", "notes": ""},
+                    "coordinate_color": {"status": "pending", "notes": ""},
+                    "notes": "",
+                },
             }
         )
     report = {
@@ -216,9 +230,10 @@ def command_compare(args: argparse.Namespace) -> int:
         "mask_layer_report_sha256": sha256(mask_layer_path),
         "view_count": len(rows),
         "views": rows,
-        "analysis_boundary": "This tool projects and displays reference/model color at identical camera coordinates. It does not score color similarity or decide what to repair; the Agent performs the refinement judgment.",
+        "review_order": "Review each view as one unit: mask/scale/position first, then coordinate/color/material, repair the shared model, and rerender affected plus neighboring views before advancing.",
+        "analysis_boundary": "This tool fuses mask/scale and coordinate/color evidence per angle. It does not score similarity or decide what to repair; the Agent performs the joint refinement judgment.",
     }
-    report_path = output / "coordinate-color-comparison.json"
+    report_path = output / "fused-multiview-comparison.json"
     write_json(report_path, report)
     print(json.dumps({"status": report["status"], "report": str(report_path), "views": len(rows)}, ensure_ascii=False))
     return 0
@@ -228,15 +243,15 @@ def validate_comparison_report(path: Path) -> dict[str, Any]:
     report = read_json(path)
     errors: list[str] = []
     if report.get("schema") != COMPARE_SCHEMA:
-        errors.append(f"unsupported coordinate-color schema: {report.get('schema')}")
+        errors.append(f"unsupported fused-multiview schema: {report.get('schema')}")
     if report.get("status") != "needs-agent-review":
-        errors.append("coordinate-color report status is not needs-agent-review")
+        errors.append("fused-multiview report status is not needs-agent-review")
     rows = report.get("views") if isinstance(report.get("views"), list) else []
     if not 8 <= len(rows) <= 72 or report.get("view_count") != len(rows):
-        errors.append("coordinate-color report must contain 8-72 views and a matching count")
+        errors.append("fused-multiview report must contain 8-72 views and a matching count")
     ids = [row.get("view_id") for row in rows if isinstance(row, dict)]
     if len(ids) != len(set(ids)):
-        errors.append("coordinate-color view IDs are not unique")
+        errors.append("fused-multiview view IDs are not unique")
     for label in ("reference_set", "alignment", "render_report", "mask_layer_report"):
         source = Path(str(report.get(label, ""))).expanduser().resolve()
         if not source.is_file() or sha256(source) != report.get(f"{label}_sha256"):
@@ -245,8 +260,17 @@ def validate_comparison_report(path: Path) -> dict[str, Any]:
         canvas = row.get("canvas") if isinstance(row.get("canvas"), dict) else {}
         if not canvas.get("width") or not canvas.get("height") or canvas.get("coordinates") != "identical-camera-projection":
             errors.append(f"{row.get('view_id')} does not use one identical projected canvas")
-        if (row.get("agent_review") or {}).get("status") not in {"pending", "pass", "fail"}:
+        mask_scale = row.get("mask_scale") if isinstance(row.get("mask_scale"), dict) else {}
+        if not mask_scale.get("canvas") or not mask_scale.get("evidence"):
+            errors.append(f"{row.get('view_id')} is missing fused mask/scale evidence")
+        review = row.get("agent_review") if isinstance(row.get("agent_review"), dict) else {}
+        if review.get("status") not in {"pending", "pass", "fail"}:
             errors.append(f"{row.get('view_id')} has invalid agent_review status")
+        for gate in ("mask_scale", "coordinate_color"):
+            if (review.get(gate) or {}).get("status") not in {"pending", "pass", "fail"}:
+                errors.append(f"{row.get('view_id')} has invalid {gate} review status")
+        if review.get("status") == "pass" and any((review.get(gate) or {}).get("status") != "pass" for gate in ("mask_scale", "coordinate_color")):
+            errors.append(f"{row.get('view_id')} overall pass requires both fused sub-gates to pass")
         for name, evidence in (row.get("evidence") or {}).items():
             evidence_path = Path(str(evidence.get("path", ""))).expanduser().resolve()
             if not evidence_path.is_file() or sha256(evidence_path) != evidence.get("sha256"):
@@ -259,7 +283,7 @@ def validate_comparison_report(path: Path) -> dict[str, Any]:
         "report_sha256": sha256(path),
         "view_count": len(rows),
         "errors": errors,
-        "meaning": "pass verifies projection coordinates and evidence integrity only; the Agent judges color and refinement",
+        "meaning": "pass verifies fused mask/scale and color evidence integrity only; the Agent judges and repairs each angle",
     }
 
 
@@ -272,7 +296,7 @@ def command_verify(args: argparse.Namespace) -> int:
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     sub = root.add_subparsers(dest="command", required=True)
-    compare = sub.add_parser("compare", help="Project reference and model colors on identical camera coordinates")
+    compare = sub.add_parser("compare", help="Fuse mask/scale and coordinate/color evidence for every angle")
     compare.add_argument("--reference-set", required=True)
     compare.add_argument("--alignment", required=True)
     compare.add_argument("--render-report", required=True)

@@ -52,15 +52,26 @@ class AngleReviewTests(unittest.TestCase):
                 "color_overlay_50_50": evidence_record,
                 "color_difference": evidence_record,
                 "coordinate_checkerboard": evidence_record,
-                "coordinate_color_panel": evidence_record,
+                "fused_mask_scale_color_panel": evidence_record,
             }
             color_rows = [
                 {
                     "view_id": f"view-{index:03d}",
                     "canvas": {"width": 100, "height": 200, "origin": "top-left", "coordinates": "identical-camera-projection"},
                     "background_rgb": [128, 128, 128],
+                    "mask_scale": {
+                        "canvas": layer_rows[index]["canvas"],
+                        "reference_mask_bbox_px": layer_rows[index]["reference_mask_bbox_px"],
+                        "model_mask_bbox_px": layer_rows[index]["model_mask_bbox_px"],
+                        "evidence": layer_evidence,
+                    },
                     "evidence": color_evidence,
-                    "agent_review": {"status": "pass", "notes": "unit fixture"},
+                    "agent_review": {
+                        "status": "pass",
+                        "mask_scale": {"status": "pass", "notes": "unit fixture"},
+                        "coordinate_color": {"status": "pass", "notes": "unit fixture"},
+                        "notes": "unit fixture",
+                    },
                 }
                 for index in range(8)
             ]

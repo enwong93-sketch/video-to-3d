@@ -4,7 +4,7 @@ An evidence-driven Codex Agent Skill for turning a fixed-character turntable vid
 whole multi-view character sheet into an editable Blender character model.
 
 The workflow measures real source timecodes, extracts 8-72 verified angles, calibrates matching
-orthographic cameras, compares same-coordinate masks and colour, and keeps retopology and Blender
+orthographic cameras, fuses same-angle mask/scale and colour refinement per view, and keeps retopology and Blender
 lookdev as separate review gates.
 
 ## Highlights
@@ -13,7 +13,7 @@ lookdev as separate review gates.
 - Includes a reusable MiniMax H3 / H3D H3 IR prompt framework without pre-cutting the sheet.
 - Audits uniform rotation against observed source frames and SHA-256 evidence.
 - Builds 8-72 same-scale Blender reference cameras around one shared model origin.
-- Produces reference masks, silhouette layers, coordinate/colour comparisons, and every-angle review artifacts.
+- Produces one fused mask/scale/coordinate/colour review for every angle, plus final review artifacts.
 - Rejects per-camera geometry, silent angle reduction, neural-mesh substitution, and unsupported quality claims.
 
 ## Install

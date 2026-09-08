@@ -26,14 +26,13 @@ The Agent inspects the overlay, compares neighboring yaws, decides whether share
 must change, edits the model, and rerenders. Treat a faulty segmentation mask as an input problem:
 correct and re-admit the mask rather than changing the model to fit bad evidence.
 
-## Per-angle coordinate and color refinement gate
+## Per-angle fused mask/scale and coordinate/color refinement gate
 
-After every Step 5 mask review passes, keep the camera rig and model transform locked. Render the same
-model with provisional/final materials, then project the reference subject and model render onto one
-identical camera pixel canvas.
+Keep the camera rig and model transform locked. Render the same model with provisional/final
+materials, then fuse mask/scale and coordinate/color evidence on one identical camera pixel canvas.
+Pending raw mask evidence does not block generation; it is judged with color for the same angle.
 
-For every angle, inspect the reference projection, model projection, 50/50 overlay, fixed-coordinate
-checkerboard, amplified RGB difference, and combined panel. Repair in this order:
+For every angle, inspect the six-panel fused artifact before advancing. Repair in this order:
 
 1. shared geometry or placement when corresponding features land at different coordinates;
 2. large value/color blocks and material assignment;
@@ -41,8 +40,8 @@ checkerboard, amplified RGB difference, and combined panel. Repair in this order
 4. UV/texture placement and reference-visible secondary details.
 
 Do not move calibrated cameras, rescale one angle, or use lighting/texture to conceal a geometry
-problem. The tool does not score or diagnose the images. The Agent records a written pass/fail for
-each `view_id` and rerenders all affected neighboring angles after every retained change.
+problem. The tool does not score or diagnose the images. Both nested gates and the overall view must
+pass; rerender affected neighboring angles after every retained change.
 
 ## Retained milestone gates
 
@@ -112,8 +111,8 @@ accessories. The neutral A-pose must still reproduce the reference set after rig
 
 Render the final saved/reopened model from every calibrated camera. For each view, compare reference,
 transparent render, the same-coordinate two-layer mask overlay, coordinate/color panel, checkerboard,
-ordinary overlay, and difference evidence. Both Step 5 and Step 6 evidence must verify and carry
-Agent passes before judging silhouette, scale, proportions, visible design, materials, form
+ordinary overlay, and difference evidence. Step 7 fused evidence must verify and both nested gates
+must carry Agent passes before judging silhouette, scale, proportions, visible design, materials, form
 readability, intersections, anatomy, and beauty. Inspect
 face, both hands, both feet, hair rear mass, costume seams, and all asymmetry at 100% pixels. Every
 per-view `mask_layer_match`, `coordinate_color_match`, and visual gate plus the all-view final audit

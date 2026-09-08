@@ -1,9 +1,9 @@
 ---
 name: video-to-3d
-description: Turn a single-character A-pose orbit video or an approved whole multi-view character sheet into an editable Blender model using the local MiniMax H3 MAIN and H3 IR turntable generation when needed, measured 8-72 angle evidence, calibrated reference cameras, simple mask overlays, same-camera coordinate/color refinement, source-backed retopology and Blender lookdev/QA, and every-angle beauty review. Use for fixed-subject character turntables and Blender reconstruction; do not use for action footage, moving subjects, direct neural-mesh generation, or photogrammetry capture.
+description: Turn a single-character A-pose orbit video or an approved whole multi-view character sheet into an editable Blender model using the local MiniMax H3 MAIN and H3 IR turntable generation when needed, measured 8-72 angle evidence, calibrated reference cameras, fused per-angle mask/scale and coordinate/color refinement, source-backed retopology and Blender lookdev/QA, and every-angle beauty review. Use for fixed-subject character turntables and Blender reconstruction; do not use for action footage, moving subjects, direct neural-mesh generation, or photogrammetry capture.
 license: MIT
 metadata:
-  version: 1.6.0
+  version: 1.7.0
   default_angles: 24
   tested_blender: 5.1.0
 ---
@@ -27,10 +27,10 @@ cameras, reference images, model parts, and review evidence remain inspectable a
 - At every admitted angle, place the visually approved reference-character mask and Blender render
   alpha mask on the same-sized canvas at identical pixel coordinates. Show overlap, reference-only,
   and model-only pixels; leave interpretation and repair decisions to the Agent.
-- After scale/silhouette review passes, project reference and model color onto the same calibrated
-  camera coordinates and let the Agent refine position, value, color, materials, and visible details.
-- Treat retopology and Blender aesthetic/QA as two independent Step 7 gates. Rerun mask and color
-  evidence after topology, material, UV, normal, or visible look changes.
+- For each angle, review mask/scale/position and coordinate/color/material evidence together before
+  advancing. Never finish all mask angles first and postpone color to a separate batch.
+- Treat retopology and Blender aesthetic/QA as two independent Step 8 gates. Rerun fused evidence
+  after topology, material, UV, normal, or visible look changes.
 - Finish with a full-resolution beauty audit across every angle. Numeric checks support but never
   replace visual judgment.
 - Do not route geometry generation through IMG2 Three.js, a neural 3D service, a point cloud, a
@@ -174,7 +174,7 @@ torso and limbs, independent hands/fingers, independent feet/soles, costume, arm
 Use every admitted camera while shaping the same geometry. Do not make camera-specific meshes,
 per-view scale corrections, or a front-only mannequin and call the rough model complete.
 
-## 5. Overlay same-angle masks and repair scale and silhouette
+## 5. Prepare reviewed reference masks
 
 This step compares the rough/refined model with each corresponding angle without replacing the
 Agent's judgment. Read the mask contract in [reference contracts](references/reference-contracts.md).
@@ -193,57 +193,59 @@ Inspect every cyan mask overlay at full resolution. Correct background leakage, 
 accessories, filled gaps, and cropped edges; then set the manifest, every `visual_status`, reviewer,
 and review time to `pass`.
 
+## 6. Generate same-angle mask and scale evidence
+
 Render the current shared model through every calibrated camera, then place the reference mask and
 model alpha mask on one same-sized canvas at identical pixel coordinates:
 
 ```powershell
 <blender.exe> <work>\character-model.blend --background --python-exit-code 2 `
   --python scripts/blender_render_views.py -- `
-  --out <work>\step5-renders --report <work>\step5-render-set.json
+  --out <work>\step6-renders --report <work>\step6-render-set.json
 
 python scripts/occlusion_mask_test.py compare `
   --reference-set <work>\reference-set\reference-set.json `
-  --alignment <work>\alignment.json --render-report <work>\step5-render-set.json `
+  --alignment <work>\alignment.json --render-report <work>\step6-render-set.json `
   --reference-masks <work>\reference-masks\reference-masks.json `
-  --out <work>\step5-mask-layers
+  --out <work>\step6-mask-layers
 ```
 
-For every `view_id`, inspect `mask-layer-overlay.png`: green is overlap, red is reference-only, and
-blue is model-only. Use the red/blue edges to judge scale, position, silhouette, missing volume, and
-extra volume. The tool does not score or interpret the image. The Agent changes the one shared model,
-rerenders all affected and neighboring angles, and repeats until the Agent sets every
-`views[].agent_review.status` in `mask-layer-comparison.json` to `pass` with notes.
+These mask layers are evidence inputs for Step 7. Do not approve every mask as a separate batch
+before looking at color.
 
-## 6. Project reference coordinates and compare color for refinement
+## 7. Fuse mask/scale and coordinate/color refinement per angle
 
-Step 5 must pass first. Keep every calibrated camera, orthographic scale, shift, render resolution,
-root transform, and character pose locked. Add/refine the secondary character forms and provisional
-materials, then render all admitted angles again.
+Keep every calibrated camera, orthographic scale, shift, render resolution, root transform, and
+character pose locked. Pending Step 6 mask reviews do not block this command because both evidence
+types must be judged together for the same angle.
 
 Project the reference image and Blender render onto the exact same camera pixel canvas:
 
 ```powershell
-python scripts/coordinate_color_compare.py compare `
+python scripts/fused_multiview_compare.py compare `
   --reference-set <work>\reference-set\reference-set.json `
-  --alignment <work>\alignment.json --render-report <work>\step5-render-set.json `
-  --mask-layer-report <work>\step5-mask-layers\mask-layer-comparison.json `
-  --out <work>\step6-coordinate-color
+  --alignment <work>\alignment.json --render-report <work>\step6-render-set.json `
+  --mask-layer-report <work>\step6-mask-layers\mask-layer-comparison.json `
+  --out <work>\step7-fused-multiview
 ```
 
-The script produces, for every `view_id`, the reference projection, model projection, 50/50 overlay,
-coordinate checkerboard, amplified absolute color difference, and a four-panel comparison. It does
-not score color or decide what to repair.
+The script produces one six-panel fused image per `view_id`: mask overlap, mask on reference,
+reference color, model color, 50/50 color overlay, and amplified color difference. It retains the
+standalone evidence and does not score similarity or decide what to repair.
 
-The Agent inspects the files in this order:
+Process one angle as one unit before moving to the next:
 
-1. Confirm the same feature lands at the same pixel coordinates; if not, repair shared geometry or
-   placement without moving the calibrated camera.
-2. Compare large value and color blocks for skin, hair, eyes, costume, armor, and accessories.
-3. Correct material assignment, base color, roughness/specular response, texture placement, and
-   reference-visible details. Do not hide a geometry error with lighting or texture.
-4. Recheck front, profiles, back, diagonals, and neighboring angles after every retained change.
-5. Repeat until no material unexplained coordinate or color gap remains, then set every
-   `views[].agent_review.status` in `coordinate-color-comparison.json` to `pass` with notes.
+1. Read the red/blue mask edges and repair shared scale, position, silhouette, missing volume, or
+   extra volume without moving the calibrated camera.
+2. On that same angle, compare feature coordinates and value/color blocks for skin, hair, eyes,
+   costume, armor, and accessories.
+3. Correct materials and visible details without hiding geometry errors with lighting or texture.
+4. Rerender the changed angle and neighboring angles, regenerate both evidence types, and repeat.
+5. Set `agent_review.mask_scale.status` and `agent_review.coordinate_color.status` to `pass`; only
+   then set the row's overall `agent_review.status` to `pass` with notes.
+
+The report is `fused-multiview-comparison.json`. A view cannot pass while either nested gate is
+pending or failed. Never review all mask panels first and all color panels afterward.
 
 Concept art and a Blender render need not be literally pixel-identical when their lighting model or
 stylization differs. "Pass" means the Agent has explained or corrected every material difference
@@ -253,13 +255,13 @@ For anime/NPR characters, load `$build-anime-npr-character` as a part-craft supp
 available. Its artistic part gates supplement this workflow; the measured cameras and every-angle
 evidence remain authoritative.
 
-## 7. Retopology, Blender aesthetic review, and final audit
+## 8. Retopology, Blender aesthetic review, and final audit
 
 Read [final aesthetic and retopology](references/final-aesthetic-retopology.md). It pins and
 attributes the selected upstream sources and converts them into two separate lanes; one never counts
 as passing the other.
 
-### 7A. Retopology lane
+### 8A. Retopology lane
 
 Use the manual, deformation-aware workflow derived from
 `MushroomFleet/BlenderRetopology-Skill`: preserve the approved high-resolution model, decide the
@@ -269,19 +271,17 @@ face, shoulders, elbows, wrists, fingers, hips, knees, ankles, neck, clothing, h
 Do not apply the source's example decimation ratio as a universal rule and do not auto-remesh a hero
 character without manual cleanup.
 
-After topology changes, rerender every calibrated angle and rerun Step 5. If UVs, materials, normals,
-or visible colors changed, rerun Step 6 as well. Retopology is not accepted until the same-coordinate
-silhouette and coordinate/color reviews pass again.
+After topology, UV, material, normal, or visible look changes, rerender every calibrated angle and
+rerun Steps 6-7. Retopology is not accepted until every fused per-angle review passes again.
 
-### 7B. Blender aesthetic and QA lane
+### 8B. Blender aesthetic and QA lane
 
 Use the `lookdev` plus `qa-review` workflow from `arjun988/blender-skills`: clay/grey form check,
 base materials, neutral evaluation light, beauty light, screenshot comparison, written gap list,
 bounded refinement, and explicit final verdict. Lighting and grading may improve presentation only
-after geometry and material correspondence are already correct; never use them to hide a Step 5 or
-Step 6 failure.
+after geometry and material correspondence are already correct; never use them to hide a Step 7 failure.
 
-Produce the final render set, final Step 5 mask layers, and final Step 6 coordinate/color report.
+Produce the final render set, final Step 6 mask layers, and final Step 7 fused multiview report.
 Use new output directories for every retained iteration:
 
 ```powershell
@@ -296,27 +296,25 @@ python scripts/occlusion_mask_test.py compare `
   --out <work>\final-mask-layers
 ```
 
-Inspect every final mask layer and set all `agent_review.status` values to `pass` or `fail`. Step 6
-will reject a pending/failed Step 5 report. After Step 5 passes:
+Immediately fuse the final mask layers with color evidence; do not approve masks separately:
 
 ```powershell
-python scripts/coordinate_color_compare.py compare `
+python scripts/fused_multiview_compare.py compare `
   --reference-set <work>\reference-set\reference-set.json `
   --alignment <work>\alignment.json --render-report <work>\final-render-set.json `
   --mask-layer-report <work>\final-mask-layers\mask-layer-comparison.json `
-  --out <work>\final-coordinate-color
+  --out <work>\final-fused-multiview
 ```
 
-Inspect every final coordinate/color artifact and set all `agent_review.status` values to `pass` or
-`fail`. Both comparison reports must retain `pass` for every admitted angle. Then prepare the
-independent final review:
+Inspect each final fused panel angle by angle. Both nested statuses and the overall row status must
+pass for every admitted angle. Then prepare the independent final review:
 
 ```powershell
 python scripts/angle_review.py prepare `
   --reference-set <work>\reference-set\reference-set.json `
   --alignment <work>\alignment.json --render-report <work>\final-render-set.json `
   --mask-layer-report <work>\final-mask-layers\mask-layer-comparison.json `
-  --coordinate-color-report <work>\final-coordinate-color\coordinate-color-comparison.json `
+  --fused-multiview-report <work>\final-fused-multiview\fused-multiview-comparison.json `
   --out <work>\final-angle-review
 ```
 
@@ -330,8 +328,8 @@ python scripts/angle_review.py verify `
   --review <work>\final-angle-review\every-angle-review.json
 ```
 
-Deliver only when source verification, reference-mask admission, fresh Blender reopen, Step 5, Step
-6, retopology, aesthetic/QA, every-angle review, and final beauty audit all pass. Keep the editable
+Deliver only when source verification, reference-mask admission, fresh Blender reopen, Step 7 fused
+per-angle review, retopology, aesthetic/QA, every-angle review, and final beauty audit all pass. Keep the editable
 `.blend`, high-resolution backup, retopologized mesh, wireframes, manifests, masks, hashes,
 full-resolution renders, overlays, color comparisons, and verdicts together.
 

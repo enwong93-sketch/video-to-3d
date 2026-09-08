@@ -126,12 +126,13 @@ def prepare(args: argparse.Namespace) -> int:
     color_rows = {row["view_id"]: row for row in coordinate_color.get("views") or []}
     if not 8 <= len(views) <= 72 or set(views) != set(alignments) or set(views) != set(renders) or set(views) != set(mask_layer_rows) or set(views) != set(color_rows):
         raise ReviewError("reference, alignment, render, mask-layer, and coordinate/color reports must contain the same 8-72 view IDs")
-    incomplete_layers = [view_id for view_id, row in mask_layer_rows.items() if (row.get("agent_review") or {}).get("status") != "pass"]
-    incomplete_colors = [view_id for view_id, row in color_rows.items() if (row.get("agent_review") or {}).get("status") != "pass"]
-    if incomplete_layers:
-        raise ReviewError("Step 5 mask-layer Agent review is incomplete: " + ", ".join(sorted(incomplete_layers)))
-    if incomplete_colors:
-        raise ReviewError("Step 6 coordinate/color Agent review is incomplete: " + ", ".join(sorted(incomplete_colors)))
+    incomplete_fused = []
+    for view_id, row in color_rows.items():
+        agent_review = row.get("agent_review") if isinstance(row.get("agent_review"), dict) else {}
+        if agent_review.get("status") != "pass" or any((agent_review.get(gate) or {}).get("status") != "pass" for gate in ("mask_scale", "coordinate_color")):
+            incomplete_fused.append(view_id)
+    if incomplete_fused:
+        raise ReviewError("Step 7 fused mask/scale and coordinate/color review is incomplete: " + ", ".join(sorted(incomplete_fused)))
     output.mkdir(parents=True, exist_ok=True)
     evidence_dir = output / "evidence"
     evidence_dir.mkdir(parents=True, exist_ok=True)
@@ -271,9 +272,6 @@ def verify(args: argparse.Namespace) -> int:
         mask_layer_rows = {row["view_id"]: row for row in layer_report.get("views") or [] if isinstance(row, dict)}
         if set(mask_layer_rows) != set(ids):
             errors.append("mask-layer report view IDs do not match the final review")
-        incomplete = [view_id for view_id, row in mask_layer_rows.items() if (row.get("agent_review") or {}).get("status") != "pass"]
-        if incomplete:
-            errors.append("Step 5 mask-layer Agent review is not pass for: " + ", ".join(sorted(incomplete)))
     coordinate_color_path = Path(str(review.get("coordinate_color_report", ""))).expanduser().resolve()
     color_rows: dict[str, dict[str, Any]] = {}
     if not coordinate_color_path.is_file() or sha256(coordinate_color_path) != review.get("coordinate_color_report_sha256"):
@@ -286,9 +284,13 @@ def verify(args: argparse.Namespace) -> int:
         color_rows = {row["view_id"]: row for row in color_report.get("views") or [] if isinstance(row, dict)}
         if set(color_rows) != set(ids):
             errors.append("coordinate/color report view IDs do not match the final review")
-        incomplete = [view_id for view_id, row in color_rows.items() if (row.get("agent_review") or {}).get("status") != "pass"]
+        incomplete = []
+        for view_id, row in color_rows.items():
+            agent_review = row.get("agent_review") if isinstance(row.get("agent_review"), dict) else {}
+            if agent_review.get("status") != "pass" or any((agent_review.get(gate) or {}).get("status") != "pass" for gate in ("mask_scale", "coordinate_color")):
+                incomplete.append(view_id)
         if incomplete:
-            errors.append("Step 6 coordinate/color Agent review is not pass for: " + ", ".join(sorted(incomplete)))
+            errors.append("Step 7 fused mask/scale and coordinate/color review is not pass for: " + ", ".join(sorted(incomplete)))
     thresholds = review.get("thresholds") if isinstance(review.get("thresholds"), dict) else {}
     for row in rows:
         view_id = row.get("view_id", "unknown")
@@ -377,7 +379,7 @@ def parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--alignment", required=True)
     prepare_parser.add_argument("--render-report", required=True)
     prepare_parser.add_argument("--mask-layer-report", required=True)
-    prepare_parser.add_argument("--coordinate-color-report", required=True)
+    prepare_parser.add_argument("--fused-multiview-report", "--coordinate-color-report", dest="coordinate_color_report", required=True)
     prepare_parser.add_argument("--out", required=True)
     prepare_parser.add_argument("--max-height-error-pct", type=float, default=1.0)
     prepare_parser.add_argument("--max-width-error-pct", type=float, default=3.0)

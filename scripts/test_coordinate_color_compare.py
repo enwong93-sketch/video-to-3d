@@ -68,7 +68,7 @@ class CoordinateColorTests(unittest.TestCase):
         output = root / "coordinate-color"
         result = color_test.command_compare(argparse.Namespace(reference_set=str(reference), alignment=str(alignment), render_report=str(render), mask_layer_report=str(layers), out=str(output), checker_size=16))
         self.assertEqual(result, 0)
-        report_path = output / "coordinate-color-comparison.json"
+        report_path = output / "fused-multiview-comparison.json"
         return json.loads(report_path.read_text(encoding="utf-8")), report_path
 
     def test_identical_colors_create_black_difference(self) -> None:
@@ -90,13 +90,32 @@ class CoordinateColorTests(unittest.TestCase):
             self.assertNotIn("metrics", target)
             self.assertEqual(color_test.validate_comparison_report(report_path)["status"], "pass")
 
-    def test_step_five_review_is_required(self) -> None:
+    def test_pending_mask_review_is_fused_instead_of_blocking_color(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             reference, alignment, render, layers = self.fixture(root, admit_layers=False)
-            with self.assertRaises(color_test.ColorCompareError):
-                color_test.command_compare(argparse.Namespace(reference_set=str(reference), alignment=str(alignment), render_report=str(render), mask_layer_report=str(layers), out=str(root / "blocked"), checker_size=16))
-            self.assertFalse((root / "blocked").exists())
+            output = root / "fused"
+            self.assertEqual(color_test.command_compare(argparse.Namespace(reference_set=str(reference), alignment=str(alignment), render_report=str(render), mask_layer_report=str(layers), out=str(output), checker_size=16)), 0)
+            report = json.loads((output / "fused-multiview-comparison.json").read_text(encoding="utf-8"))
+            review = report["views"][0]["agent_review"]
+            self.assertEqual(review["mask_scale"]["status"], "pending")
+            self.assertEqual(review["coordinate_color"]["status"], "pending")
+
+    def test_fused_panel_contains_mask_and_color_for_one_angle(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report, _ = self.compare(Path(temp_dir))
+            panel_path = Path(report["views"][0]["evidence"]["fused_mask_scale_color_panel"]["path"])
+            with Image.open(panel_path) as panel:
+                self.assertEqual(panel.size, (64 * 6, 96))
+
+    def test_overall_pass_requires_both_subgates(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report, report_path = self.compare(Path(temp_dir))
+            report["views"][0]["agent_review"]["status"] = "pass"
+            report_path.write_text(json.dumps(report), encoding="utf-8")
+            result = color_test.validate_comparison_report(report_path)
+            self.assertEqual(result["status"], "fail")
+            self.assertTrue(any("both fused sub-gates" in error for error in result["errors"]))
 
     def test_coordinate_color_evidence_scales_to_72_angles(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
