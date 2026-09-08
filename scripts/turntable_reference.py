@@ -18,7 +18,7 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
-from artifact_safety import validate_image_size, validate_view_ids
+from artifact_safety import quadrant_order_manifest, quadrant_review_order, validate_image_size, validate_view_ids
 from rotation_audit import verify_payload as verify_rotation_audit
 from rotation_contract import AUDIT_SCHEMA
 
@@ -443,6 +443,8 @@ def command_build(args: argparse.Namespace) -> int:
     facts = video_facts(video)
     if not MIN_ANGLES <= args.angles <= MAX_ANGLES:
         raise IntakeError(f"Angles must be between {MIN_ANGLES} and {MAX_ANGLES}")
+    if args.angles % 4:
+        raise IntakeError("Angles must be divisible by 4 for four-quadrant review rounds")
     if not 1 <= args.candidates <= 9 or args.candidates % 2 == 0:
         raise IntakeError("Candidates must be an odd number from 1 to 9")
     if not 0 <= args.candidate_yaw_radius_deg <= 2.0:
@@ -499,7 +501,6 @@ def command_build(args: argparse.Namespace) -> int:
     views_dir = out / "views"
     candidates_dir = out / "candidates"
     views: list[dict[str, Any]] = []
-    sheet_images: list[Path] = []
     sign = 1.0 if direction == "clockwise" else -1.0
     period = end - start
     for view_index, target in enumerate(targets):
@@ -545,12 +546,13 @@ def command_build(args: argparse.Namespace) -> int:
             **facts_image,
         }
         views.append(view)
-        sheet_images.append(selected)
 
     if len({row["sha256"] for row in views}) != len(views):
         raise IntakeError("Duplicate admitted source frames detected; choose a longer/cleaner interval")
+    review_views = quadrant_review_order(views, error_type=IntakeError)
+    analysis_order = quadrant_order_manifest(views, error_type=IntakeError)
     sheet = out / "contact-sheet.png"
-    make_contact_sheet(sheet_images, sheet, args.columns)
+    make_contact_sheet([out / row["path"] for row in review_views], sheet, args.columns)
     primary = min(views, key=lambda row: abs(float(row["target_yaw_deg"])))
     payload = {
         "schema": SCHEMA,
@@ -570,10 +572,11 @@ def command_build(args: argparse.Namespace) -> int:
         "timing_evidence": timing_evidence,
         "primary_reference": primary["path"],
         "views": views,
+        "analysis_order": analysis_order,
         "contact_sheet": {
             "path": sheet.relative_to(out).as_posix(),
             "sha256": sha256(sheet),
-            "order": [row["view_id"] for row in views],
+            "order": [row["view_id"] for row in review_views],
         },
         "provenance": {
             "admitted_view_kind": "decoded_source_frame",
@@ -585,7 +588,7 @@ def command_build(args: argparse.Namespace) -> int:
         },
     }
     write_json(out / "reference-set.json", payload)
-    write_json(out / "review.json", review_template([row["view_id"] for row in views]))
+    write_json(out / "review.json", review_template([row["view_id"] for row in review_views]))
     print(
         json.dumps(
             {
@@ -666,9 +669,13 @@ def verification(reference_path: Path, review_path: Path) -> dict[str, Any]:
         else:
             errors.append(f"unsupported timing evidence kind: {timing.get('kind')}")
     try:
-        validate_view_ids(views, error_type=IntakeError)
+        ids = validate_view_ids(views, error_type=IntakeError)
+        expected_order = quadrant_order_manifest(views, error_type=IntakeError)
+        if reference.get("analysis_order") != expected_order:
+            errors.append("analysis_order does not match four-quadrant rounds")
     except IntakeError as exc:
         errors.append(str(exc))
+        ids = [row.get("view_id") for row in views if isinstance(row, dict)]
     hashes = [row.get("sha256") for row in views if isinstance(row, dict)]
     if len(hashes) != len(set(hashes)):
         errors.append("admitted view hashes are not unique")
@@ -721,8 +728,9 @@ def verification(reference_path: Path, review_path: Path) -> dict[str, Any]:
         sheet_path = resolve_under(base, str(sheet["path"]))
         if not sheet_path.is_file() or sha256(sheet_path) != sheet.get("sha256"):
             errors.append("contact-sheet file is missing or changed")
-        if sheet.get("order") != ids:
-            errors.append("contact-sheet order does not match view order")
+        expected_ids = [row["view_id"] for row in quadrant_review_order(views, error_type=IntakeError)]
+        if sheet.get("order") != expected_ids:
+            errors.append("contact-sheet order does not match four-quadrant review order")
     except (KeyError, IntakeError) as exc:
         errors.append(f"invalid contact sheet: {exc}")
     primary = reference.get("primary_reference")

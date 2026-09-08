@@ -87,7 +87,7 @@ class MaskLayerTests(unittest.TestCase):
     def test_changed_layer_shows_reference_only_and_model_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             report, report_path = self.compare(Path(temp_dir), changed_view=True)
-            target = report["views"][2]
+            target = next(row for row in report["views"] if row["view_id"] == "view-002")
             overlay_path = Path(target["evidence"]["mask_layer_overlay"]["path"])
             colors = np.asarray(Image.open(overlay_path).convert("RGB"))
             self.assertTrue(np.any(np.all(colors == (245, 65, 65), axis=2)))
@@ -101,6 +101,14 @@ class MaskLayerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             report, _ = self.compare(Path(temp_dir), count=72)
             self.assertEqual(report["view_count"], 72)
+
+    def test_eight_angles_follow_quadrant_rounds(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report, _ = self.compare(Path(temp_dir))
+            self.assertEqual([row["view_id"] for row in report["views"]], [
+                "view-000", "view-002", "view-004", "view-006",
+                "view-001", "view-003", "view-005", "view-007",
+            ])
 
     def test_changed_evidence_hash_fails_integrity_verification(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

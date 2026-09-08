@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageChops, ImageDraw, ImageStat
 
-from artifact_safety import read_json_limited, safe_output_path, validate_image_size, validate_view_ids
+from artifact_safety import quadrant_order_manifest, quadrant_review_order, read_json_limited, safe_output_path, validate_image_size, validate_view_ids
 
 from occlusion_mask_test import (
     ALIGNMENT_SCHEMA,
@@ -141,8 +141,9 @@ def command_compare(args: argparse.Namespace) -> int:
     evidence_dir = output / "evidence"
     evidence_dir.mkdir()
     rows: list[dict[str, Any]] = []
-    for view_id in sorted(views, key=lambda key: float(views[key]["target_yaw_deg"])):
-        view = views[view_id]
+    ordered_views = quadrant_review_order(views.values(), error_type=ColorCompareError)
+    for review_index, view in enumerate(ordered_views):
+        view_id = view["view_id"]
         reference_file = resolve_reference_image(reference_path, view)
         model_file = Path(str(renders[view_id].get("path", ""))).expanduser().resolve()
         mask_file = Path(str(masks[view_id].get("path", ""))).expanduser().resolve()
@@ -198,6 +199,8 @@ def command_compare(args: argparse.Namespace) -> int:
         rows.append(
             {
                 "view_id": view_id,
+                "review_round": review_index // 4 + 1,
+                "review_position": review_index % 4 + 1,
                 "yaw_deg": float(view["target_yaw_deg"]),
                 "canvas": {"width": expected_size[0], "height": expected_size[1], "origin": "top-left", "coordinates": "identical-camera-projection"},
                 "background_rgb": list(background_rgb),
@@ -229,6 +232,7 @@ def command_compare(args: argparse.Namespace) -> int:
         "mask_layer_report": str(mask_layer_path),
         "mask_layer_report_sha256": sha256(mask_layer_path),
         "view_count": len(rows),
+        "analysis_order": quadrant_order_manifest(views.values(), error_type=ColorCompareError),
         "views": rows,
         "review_order": "Review each view as one unit: mask/scale/position first, then coordinate/color/material, repair the shared model, and rerender affected plus neighboring views before advancing.",
         "analysis_boundary": "This tool fuses mask/scale and coordinate/color evidence per angle. It does not score similarity or decide what to repair; the Agent performs the joint refinement judgment.",
@@ -256,6 +260,8 @@ def validate_comparison_report(path: Path) -> dict[str, Any]:
         source = Path(str(report.get(label, ""))).expanduser().resolve()
         if not source.is_file() or sha256(source) != report.get(f"{label}_sha256"):
             errors.append(f"{label} is missing or changed")
+    if any(row.get("review_round") != index // 4 + 1 or row.get("review_position") != index % 4 + 1 for index, row in enumerate(rows) if isinstance(row, dict)):
+        errors.append("fused views do not follow the four-quadrant review order")
     for row in rows:
         canvas = row.get("canvas") if isinstance(row.get("canvas"), dict) else {}
         if not canvas.get("width") or not canvas.get("height") or canvas.get("coordinates") != "identical-camera-projection":

@@ -16,7 +16,7 @@ if str(SCRIPT_DIR) not in sys.path:
 
 import bpy
 
-from artifact_safety import safe_output_path, validate_image_size, validate_view_ids
+from artifact_safety import quadrant_review_order, safe_output_path, validate_image_size, validate_view_ids
 
 
 RENDER_SCHEMA = "video-to-3d/render-set/v1"
@@ -60,14 +60,21 @@ def render_all(output: Path, resolution_percentage: int) -> dict:
     model_objects = [obj for obj in model_collection.all_objects if obj.type in {"MESH", "CURVE", "SURFACE", "META", "VOLUME"} and not obj.hide_render]
     if not model_objects:
         raise RenderError("V3D_MODEL has no renderable model objects")
-    cameras = sorted(
-        [obj for obj in bpy.data.objects if obj.type == "CAMERA" and obj.get("v3d_view_id")],
-        key=lambda obj: float(obj.get("v3d_target_yaw_deg", 0.0)),
-    )
+    camera_candidates = [obj for obj in bpy.data.objects if obj.type == "CAMERA" and obj.get("v3d_view_id")]
+    descriptors = [
+        {"view_id": str(camera["v3d_view_id"]), "target_yaw_deg": float(camera.get("v3d_target_yaw_deg", 0.0))}
+        for camera in camera_candidates
+    ]
+    review_ids = [row["view_id"] for row in quadrant_review_order(descriptors, error_type=RenderError)]
+    by_id = {str(camera["v3d_view_id"]): camera for camera in camera_candidates}
+    cameras = [by_id[view_id] for view_id in review_ids]
     expected = int(bpy.context.scene.get("v3d_view_count", 0))
     if len(cameras) != expected or not 8 <= len(cameras) <= 72:
         raise RenderError(f"expected {expected} calibrated cameras, found {len(cameras)}")
     validate_view_ids([{"view_id": str(camera["v3d_view_id"])} for camera in cameras], error_type=RenderError)
+    for index, camera in enumerate(cameras):
+        if int(camera.get("v3d_review_round", 0)) != index // 4 + 1 or int(camera.get("v3d_review_position", 0)) != index % 4 + 1:
+            raise RenderError(f"{camera.name} does not follow the four-quadrant review order")
     output.mkdir(parents=True, exist_ok=True)
     scene = bpy.context.scene
     scene.render.film_transparent = True

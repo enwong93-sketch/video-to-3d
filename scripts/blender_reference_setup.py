@@ -20,7 +20,7 @@ import bpy
 from bpy_extras.object_utils import world_to_camera_view
 from mathutils import Vector
 
-from artifact_safety import read_json_limited, validate_image_size, validate_view_ids
+from artifact_safety import quadrant_order_manifest, quadrant_review_order, read_json_limited, validate_image_size, validate_view_ids
 
 
 REFERENCE_SCHEMA = "video-to-3d/reference-set/v2"
@@ -74,6 +74,8 @@ def load_contract(reference_path: Path, alignment_path: Path) -> tuple[dict[str,
     if not MIN_ANGLES <= len(views) <= MAX_ANGLES:
         raise SetupError(f"reference set must contain {MIN_ANGLES}-{MAX_ANGLES} views")
     validate_view_ids(views, error_type=SetupError)
+    if reference.get("analysis_order") != quadrant_order_manifest(views, error_type=SetupError):
+        raise SetupError("reference set is missing the required four-quadrant analysis order")
     try:
         target_height = float(alignment["target_height_m"])
         target_center_z = float(alignment.get("target_center_z_m", target_height / 2.0))
@@ -121,6 +123,7 @@ def load_contract(reference_path: Path, alignment_path: Path) -> tuple[dict[str,
             {
                 "view_id": view_id,
                 "yaw_deg": float(view["target_yaw_deg"]),
+                "target_yaw_deg": float(view["target_yaw_deg"]),
                 "timestamp_seconds": float(view["timestamp_seconds"]),
                 "image": image_path,
                 "image_sha256": str(view["sha256"]),
@@ -209,11 +212,13 @@ def build_scene(reference_path: Path, alignment_path: Path, blend_out: Path, cle
     scene["v3d_view_count"] = len(calibrated)
     scene["v3d_reference_layer_count"] = len(calibrated)
     scene["v3d_reference_overlay_mode"] = "camera_background_front_alpha"
+    scene["v3d_analysis_order"] = json.dumps(quadrant_order_manifest(calibrated, error_type=SetupError), sort_keys=True)
     scene["v3d_target_height_m"] = float(alignment["target_height_m"])
     scene.render.resolution_percentage = 100
     camera_rows: list[dict[str, Any]] = []
 
-    for index, row in enumerate(calibrated):
+    review_calibrated = quadrant_review_order(calibrated, error_type=SetupError)
+    for index, row in enumerate(review_calibrated):
         scene.render.resolution_x = row["width"]
         scene.render.resolution_y = row["height"]
         scene.render.pixel_aspect_x = 1.0
@@ -249,6 +254,8 @@ def build_scene(reference_path: Path, alignment_path: Path, blend_out: Path, cle
         camera["v3d_reference_sha256"] = row["image_sha256"]
         camera["v3d_reference_layer_required"] = True
         camera["v3d_reference_layer_non_rendering"] = True
+        camera["v3d_review_round"] = index // 4 + 1
+        camera["v3d_review_position"] = index % 4 + 1
         camera["v3d_subject_bbox_px"] = row["bbox"]
         camera["v3d_target_height_m"] = row["target_height_m"]
         camera["v3d_alignment_residual_px"] = residual_px
@@ -261,6 +268,8 @@ def build_scene(reference_path: Path, alignment_path: Path, blend_out: Path, cle
                 "view_id": row["view_id"],
                 "camera": camera.name,
                 "yaw_deg": row["yaw_deg"],
+                "review_round": index // 4 + 1,
+                "review_position": index % 4 + 1,
                 "reference": str(row["image"]),
                 "reference_sha256": row["image_sha256"],
                 "reference_layer": {
@@ -295,6 +304,7 @@ def build_scene(reference_path: Path, alignment_path: Path, blend_out: Path, cle
         "view_count": len(camera_rows),
         "reference_layer_count": len(camera_rows),
         "reference_overlay_mode": "camera_background_front_alpha",
+        "analysis_order": quadrant_order_manifest(calibrated, error_type=SetupError),
         "cameras": camera_rows,
     }
 
@@ -313,12 +323,15 @@ def verify_scene(reference_path: Path, alignment_path: Path) -> dict[str, Any]:
         errors.append("scene reference-layer count does not match the admitted views")
     if scene.get("v3d_reference_overlay_mode") != "camera_background_front_alpha":
         errors.append("scene reference-overlay mode is missing or unsupported")
+    expected_analysis_order = quadrant_order_manifest(calibrated, error_type=SetupError)
+    if scene.get("v3d_analysis_order") != json.dumps(expected_analysis_order, sort_keys=True):
+        errors.append("scene analysis order does not match four-quadrant rounds")
     cameras = [obj for obj in bpy.data.objects if obj.type == "CAMERA" and obj.get("v3d_view_id")]
     by_id = {obj.get("v3d_view_id"): obj for obj in cameras}
     if len(cameras) != len(calibrated) or set(by_id) != {row["view_id"] for row in calibrated}:
         errors.append("camera set does not match the calibrated reference views")
     camera_rows: list[dict[str, Any]] = []
-    for row in calibrated:
+    for index, row in enumerate(quadrant_review_order(calibrated, error_type=SetupError)):
         camera = by_id.get(row["view_id"])
         if camera is None:
             continue
@@ -345,6 +358,8 @@ def verify_scene(reference_path: Path, alignment_path: Path) -> dict[str, Any]:
             errors.append(f"{row['view_id']} reference camera is mixed into V3D_MODEL")
         if not camera.get("v3d_reference_layer_required") or not camera.get("v3d_reference_layer_non_rendering"):
             errors.append(f"{row['view_id']} reference-layer contract is missing")
+        if int(camera.get("v3d_review_round", 0)) != index // 4 + 1 or int(camera.get("v3d_review_position", 0)) != index % 4 + 1:
+            errors.append(f"{row['view_id']} four-quadrant review position has drifted")
         if abs(float(camera.get("v3d_target_yaw_deg", 999.0)) - row["yaw_deg"]) > 1e-6:
             errors.append(f"{row['view_id']} yaw label has drifted")
         if abs(float(camera.data.ortho_scale) - row["ortho_scale"]) > 1e-6:
@@ -369,6 +384,8 @@ def verify_scene(reference_path: Path, alignment_path: Path) -> dict[str, Any]:
                 "camera": camera.name,
                 "reference": str(path),
                 "reference_sha256": camera.get("v3d_reference_sha256"),
+                "review_round": int(camera.get("v3d_review_round", 0)),
+                "review_position": int(camera.get("v3d_review_position", 0)),
                 "reference_layer": {
                     "kind": "camera_background_image",
                     "display_depth": backgrounds[0].display_depth if len(backgrounds) == 1 else None,
@@ -401,6 +418,7 @@ def verify_scene(reference_path: Path, alignment_path: Path) -> dict[str, Any]:
         "view_count": len(camera_rows),
         "reference_layer_count": len(camera_rows),
         "reference_overlay_mode": scene.get("v3d_reference_overlay_mode"),
+        "analysis_order": expected_analysis_order,
         "cameras": camera_rows,
         "errors": errors,
     }

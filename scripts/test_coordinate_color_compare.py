@@ -82,7 +82,7 @@ class CoordinateColorTests(unittest.TestCase):
     def test_changed_color_remains_visual_evidence_not_score(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             report, report_path = self.compare(Path(temp_dir), changed_color=True)
-            target = report["views"][2]
+            target = next(row for row in report["views"] if row["view_id"] == "view-002")
             diff_path = Path(target["evidence"]["color_difference"]["path"])
             with Image.open(diff_path) as image:
                 self.assertGreater(int(np.asarray(image).max()), 0)
@@ -121,6 +121,14 @@ class CoordinateColorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             report, _ = self.compare(Path(temp_dir), count=72)
             self.assertEqual(report["view_count"], 72)
+
+    def test_eight_angles_follow_quadrant_rounds(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report, _ = self.compare(Path(temp_dir))
+            self.assertEqual([row["view_id"] for row in report["views"]], [
+                "view-000", "view-002", "view-004", "view-006",
+                "view-001", "view-003", "view-005", "view-007",
+            ])
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ lookdev as separate review gates.
 - Includes a reusable MiniMax H3 / H3D H3 IR prompt framework without pre-cutting the sheet.
 - Audits uniform rotation against observed source frames and SHA-256 evidence.
 - Imports all 8-72 views as calibrated non-rendering Blender overlays before modeling (24 by default).
+- Reviews four opposing 90-degree views per round instead of walking through adjacent angles.
 - Produces one fused mask/scale/coordinate/colour review for every angle, plus final review artifacts.
 - Rejects per-camera geometry, silent angle reduction, neural-mesh substitution, and unsupported quality claims.
 

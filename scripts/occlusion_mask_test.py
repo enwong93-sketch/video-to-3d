@@ -15,7 +15,7 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageDraw, ImageStat
 
-from artifact_safety import read_json_limited, safe_output_path, validate_image_size, validate_view_ids
+from artifact_safety import quadrant_order_manifest, quadrant_review_order, read_json_limited, safe_output_path, validate_image_size, validate_view_ids
 
 
 REFERENCE_SCHEMA = "video-to-3d/reference-set/v2"
@@ -153,7 +153,7 @@ def command_masks(args: argparse.Namespace) -> int:
     labels: list[str] = []
     validate_view_ids(views, error_type=MaskError)
     warnings: list[str] = []
-    for view in views:
+    for review_index, view in enumerate(quadrant_review_order(views, error_type=MaskError)):
         view_id = str(view["view_id"])
         reference_file = resolve_reference_image(reference_path, view)
         with Image.open(reference_file) as opened:
@@ -193,6 +193,8 @@ def command_masks(args: argparse.Namespace) -> int:
         rows.append(
             {
                 "view_id": view_id,
+                "review_round": review_index // 4 + 1,
+                "review_position": review_index % 4 + 1,
                 "yaw_deg": float(view["target_yaw_deg"]),
                 "path": str(mask_path),
                 "sha256": sha256(mask_path),
@@ -220,6 +222,7 @@ def command_masks(args: argparse.Namespace) -> int:
         "reviewer": "",
         "reviewed_at": "",
         "all_masks_visual_match": {"status": "pending", "evidence_views": labels, "notes": ""},
+        "analysis_order": quadrant_order_manifest(views, error_type=MaskError),
         "views": rows,
         "contact_sheet": {"path": str(sheet_path), "sha256": sha256(sheet_path), "order": labels},
         "warnings": warnings,
@@ -243,6 +246,9 @@ def validate_mask_manifest(path: Path, reference_path: Path) -> tuple[dict[str, 
         errors.append("mask manifest status is not pass")
     reference_views = {row["view_id"]: row for row in reference.get("views") or []}
     rows = manifest.get("views") if isinstance(manifest.get("views"), list) else []
+    expected_ids = [row["view_id"] for row in quadrant_review_order(reference.get("views") or [], error_type=MaskError)]
+    if [row.get("view_id") for row in rows if isinstance(row, dict)] != expected_ids:
+        errors.append("mask views do not follow the four-quadrant review order")
     by_id = {row.get("view_id"): row for row in rows if isinstance(row, dict)}
     if set(by_id) != set(reference_views) or len(rows) != len(reference_views):
         errors.append("mask manifest must contain exactly one row for every reference view")
@@ -345,8 +351,9 @@ def command_compare(args: argparse.Namespace) -> int:
     evidence_dir = output / "evidence"
     evidence_dir.mkdir()
     rows: list[dict[str, Any]] = []
-    for view_id in sorted(views, key=lambda key: float(views[key]["target_yaw_deg"])):
-        view = views[view_id]
+    ordered_views = quadrant_review_order(views.values(), error_type=MaskError)
+    for review_index, view in enumerate(ordered_views):
+        view_id = view["view_id"]
         reference_file = resolve_reference_image(reference_path, view)
         model_file = Path(str(renders[view_id].get("path", ""))).expanduser().resolve()
         mask_file = Path(str(masks[view_id].get("path", ""))).expanduser().resolve()
@@ -378,6 +385,8 @@ def command_compare(args: argparse.Namespace) -> int:
         rows.append(
             {
                 "view_id": view_id,
+                "review_round": review_index // 4 + 1,
+                "review_position": review_index % 4 + 1,
                 "yaw_deg": float(view["target_yaw_deg"]),
                 "canvas": {"width": expected_size[0], "height": expected_size[1], "origin": "top-left", "coordinates": "identical"},
                 "reference_mask_bbox_px": array_bbox(reference_mask),
@@ -402,6 +411,7 @@ def command_compare(args: argparse.Namespace) -> int:
         "reference_masks": str(masks_path),
         "reference_masks_sha256": sha256(masks_path),
         "view_count": len(rows),
+        "analysis_order": quadrant_order_manifest(views.values(), error_type=MaskError),
         "views": rows,
         "legend": {
             "green": "both mask layers cover the same pixel",
@@ -433,6 +443,8 @@ def validate_comparison_report(path: Path) -> dict[str, Any]:
         source = Path(str(report.get(label, ""))).expanduser().resolve()
         if not source.is_file() or sha256(source) != report.get(f"{label}_sha256"):
             errors.append(f"{label} is missing or changed")
+    if any(row.get("review_round") != index // 4 + 1 or row.get("review_position") != index % 4 + 1 for index, row in enumerate(rows) if isinstance(row, dict)):
+        errors.append("mask-layer views do not follow the four-quadrant review order")
     for row in rows:
         canvas = row.get("canvas") if isinstance(row.get("canvas"), dict) else {}
         if not canvas.get("width") or not canvas.get("height") or canvas.get("coordinates") != "identical":

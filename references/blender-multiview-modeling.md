@@ -24,6 +24,23 @@ it must not render and must not intersect the character as geometry. Fresh reope
 confirm image hash, `FRONT` depth, `FIT` framing, alpha, collection isolation, and one overlay for
 every admitted `view_id`. Any failure blocks modeling.
 
+## Four-quadrant modeling order
+
+Never shape the model by walking through adjacent yaws. Process four overlays separated by 90
+degrees in each round, reconcile the shared model across all four, then advance. For 24 views use:
+
+1. `0/90/180/270`
+2. `45/135/225/315`
+3. `15/105/195/285`
+4. `60/150/240/330`
+5. `30/120/210/300`
+6. `75/165/255/345`
+
+The cardinal round locks height, ground, front/back width and side depth. The diagonal round exposes
+false symmetry and depth transitions. Intermediate rounds refine continuous volume without allowing
+one locally adjacent view to drag scale or proportion away from the opposing views. Recheck every
+completed round after a retained change to overall scale, body proportion, or any large shared form.
+
 ## Per-angle two-layer mask gate
 
 Before geometry work, create one visually admitted reference-character mask per view. At every

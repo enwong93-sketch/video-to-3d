@@ -3,7 +3,7 @@ name: video-to-3d
 description: Turn a single-character A-pose orbit video or an approved whole multi-view character sheet into an editable Blender model using the local MiniMax H3 MAIN and H3 IR turntable generation when needed, measured 8-72 angle evidence, calibrated reference cameras, fused per-angle mask/scale and coordinate/color refinement, source-backed retopology and Blender lookdev/QA, and every-angle beauty review. Use for fixed-subject character turntables and Blender reconstruction; do not use for action footage, moving subjects, direct neural-mesh generation, or photogrammetry capture.
 license: MIT
 metadata:
-  version: 1.7.1
+  version: 1.8.0
   default_angles: 24
   tested_blender: 5.1.0
 ---
@@ -16,8 +16,8 @@ cameras, reference images, model parts, and review evidence remain inspectable a
 
 ## Non-negotiable outcome
 
-- Use 8-72 independently decoded real source angles; default to 24. Use more only when the video has
-  enough sharp, identity-stable frames.
+- Use 8-72 independently decoded real source angles, divisible by four; default to 24. Use more only
+  when the video has enough sharp, identity-stable frames.
 - Establish true view angles from observed timecodes. A prompt that asks for constant speed is not
   proof that the resulting video is constant-speed.
 - Import every admitted view into Blender on its matching calibrated orthographic camera. One global
@@ -29,6 +29,8 @@ cameras, reference images, model parts, and review evidence remain inspectable a
   and model-only pixels; leave interpretation and repair decisions to the Agent.
 - For each angle, review mask/scale/position and coordinate/color/material evidence together before
   advancing. Never finish all mask angles first and postpone color to a separate batch.
+- Never model or review in adjacent circular order. Use four-quadrant rounds: four views separated by
+  90 degrees per round, beginning with cardinals, then diagonals, then interleaved intermediate rounds.
 - Treat retopology and Blender aesthetic/QA as two independent Step 8 gates. Rerun fused evidence
   after topology, material, UV, normal, or visible look changes.
 - Finish with a full-resolution beauty audit across every angle. Numeric checks support but never
@@ -137,7 +139,8 @@ python scripts/turntable_reference.py verify `
 ```
 
 Any failed or pending source gate is a hard stop. A valid manifest or green extraction command is not
-visual acceptance.
+visual acceptance. The generated contact sheet and `analysis_order` use the four-quadrant order, not
+ascending adjacent yaw.
 
 ## 4. Import every angle as a Blender overlay, calibrate cameras, and build the shared model
 
@@ -177,6 +180,21 @@ Treat `view_count == reference_layer_count == admitted view count` as a hard gat
 must read `24 == 24 == 24`, and every camera row must report `camera_background_image`, `FRONT`,
 `FIT`, the declared alpha, and `non_rendering: true`. Missing, hidden, stale, mismatched, or model-
 collection reference layers fail Step 4.
+
+Use the saved `analysis_order` for every modeling pass. For the default 24 views the six rounds are:
+
+1. `0°, 90°, 180°, 270°`
+2. `45°, 135°, 225°, 315°`
+3. `15°, 105°, 195°, 285°`
+4. `60°, 150°, 240°, 330°`
+5. `30°, 120°, 210°, 300°`
+6. `75°, 165°, 255°, 345°`
+
+Within each round, superimpose the matching reference overlay and reconcile one shared model across
+all four opposing views before retaining a change. Lock overall height, ground contact, origin,
+head/body ratio, shoulder/hip width, torso depth, limb length, hand/foot size, hair volume, costume
+thickness, and accessory placement. Do not proceed to the next round while any of the four views
+contradicts scale, size, proportion, silhouette, or visible part placement.
 
 Only after the fresh reopen passes, switch through every calibrated camera and confirm its reference
 is visibly superimposed over the model coordinate space. Then build one shared rough model in `V3D_MODEL`, parented to
@@ -246,7 +264,7 @@ The script produces one six-panel fused image per `view_id`: mask overlap, mask 
 reference color, model color, 50/50 color overlay, and amplified color difference. It retains the
 standalone evidence and does not score similarity or decide what to repair.
 
-Process one angle as one unit before moving to the next:
+Process views in the same four-quadrant rounds; within each round, treat each angle as one fused unit:
 
 1. Read the red/blue mask edges and repair shared scale, position, silhouette, missing volume, or
    extra volume without moving the calibrated camera.
@@ -258,7 +276,8 @@ Process one angle as one unit before moving to the next:
    then set the row's overall `agent_review.status` to `pass` with notes.
 
 The report is `fused-multiview-comparison.json`. A view cannot pass while either nested gate is
-pending or failed. Never review all mask panels first and all color panels afterward.
+pending or failed. A round cannot close until all four angles agree. Never review all mask panels
+first, all color panels afterward, or traverse `0°, 15°, 30°...` as the primary modeling sequence.
 
 Concept art and a Blender render need not be literally pixel-identical when their lighting model or
 stylization differs. "Pass" means the Agent has explained or corrected every material difference

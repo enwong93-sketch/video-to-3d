@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any, Iterable, Type
@@ -66,3 +67,54 @@ def validate_image_size(width: Any, height: Any, *, count: int = 1, error_type: 
     if count <= 0 or pixels * count > MAX_AGGREGATE_PIXELS:
         raise error_type("aggregate decoded pixels exceed the safe limit")
     return w, h
+
+
+def quadrant_rounds(rows: Iterable[Any], *, error_type: Type[Exception] = ValueError) -> list[list[dict[str, Any]]]:
+    """Return four-angle review rounds instead of adjacent circular traversal."""
+    views = list(rows)
+    validate_view_ids(views, error_type=error_type)
+    if len(views) < 8 or len(views) > 72 or len(views) % 4:
+        raise error_type("view count must be 8-72 and divisible by 4 for quadrant rounds")
+    try:
+        ordered = sorted(views, key=lambda row: float(row["target_yaw_deg"]) % 360.0)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise error_type("every view requires numeric target_yaw_deg") from exc
+    step = 360.0 / len(ordered)
+    for index, row in enumerate(ordered):
+        actual = float(row["target_yaw_deg"]) % 360.0
+        expected = index * step
+        error = min((actual - expected) % 360.0, (expected - actual) % 360.0)
+        if not math.isfinite(actual) or error > 0.02:
+            raise error_type("quadrant rounds require uniform angles beginning at 0 degrees")
+    per_quadrant = len(ordered) // 4
+    pivot = max(1, per_quadrant // 2)
+    offsets: list[int] = []
+    for index in range(pivot):
+        offsets.append(index)
+        if pivot + index < per_quadrant:
+            offsets.append(pivot + index)
+    offsets.extend(index for index in range(per_quadrant) if index not in offsets)
+    return [
+        [ordered[offset + quadrant * per_quadrant] for quadrant in range(4)]
+        for offset in offsets
+    ]
+
+
+def quadrant_review_order(rows: Iterable[Any], *, error_type: Type[Exception] = ValueError) -> list[dict[str, Any]]:
+    return [row for round_rows in quadrant_rounds(rows, error_type=error_type) for row in round_rows]
+
+
+def quadrant_order_manifest(rows: Iterable[Any], *, error_type: Type[Exception] = ValueError) -> dict[str, Any]:
+    rounds = quadrant_rounds(rows, error_type=error_type)
+    return {
+        "strategy": "four_quadrant_rounds",
+        "rule": "process four views separated by 90 degrees per round; never traverse adjacent angles",
+        "rounds": [
+            {
+                "round": index + 1,
+                "view_ids": [row["view_id"] for row in round_rows],
+                "yaw_degrees": [float(row["target_yaw_deg"]) % 360.0 for row in round_rows],
+            }
+            for index, round_rows in enumerate(rounds)
+        ],
+    }

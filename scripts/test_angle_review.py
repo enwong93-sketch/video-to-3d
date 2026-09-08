@@ -25,16 +25,19 @@ class AngleReviewTests(unittest.TestCase):
                 source.write_text(name, encoding="utf-8")
                 inputs[name] = {"path": str(source), "sha256": angle_review.sha256(source)}
             layer_evidence = {"mask_layer_overlay": evidence_record, "mask_layer_overlay_on_reference": evidence_record}
+            review_indices = [0, 2, 4, 6, 1, 3, 5, 7]
             layer_rows = [
                 {
                     "view_id": f"view-{index:03d}",
+                    "review_round": review_index // 4 + 1,
+                    "review_position": review_index % 4 + 1,
                     "canvas": {"width": 100, "height": 200, "origin": "top-left", "coordinates": "identical"},
                     "reference_mask_bbox_px": [10, 10, 90, 190],
                     "model_mask_bbox_px": [10, 10, 90, 190],
                     "evidence": layer_evidence,
                     "agent_review": {"status": "pass", "notes": "unit fixture"},
                 }
-                for index in range(8)
+                for review_index, index in enumerate(review_indices)
             ]
             layer_report = {
                 "schema": angle_review.MASK_LAYER_SCHEMA,
@@ -57,12 +60,14 @@ class AngleReviewTests(unittest.TestCase):
             color_rows = [
                 {
                     "view_id": f"view-{index:03d}",
+                    "review_round": review_index // 4 + 1,
+                    "review_position": review_index % 4 + 1,
                     "canvas": {"width": 100, "height": 200, "origin": "top-left", "coordinates": "identical-camera-projection"},
                     "background_rgb": [128, 128, 128],
                     "mask_scale": {
-                        "canvas": layer_rows[index]["canvas"],
-                        "reference_mask_bbox_px": layer_rows[index]["reference_mask_bbox_px"],
-                        "model_mask_bbox_px": layer_rows[index]["model_mask_bbox_px"],
+                        "canvas": layer_rows[review_index]["canvas"],
+                        "reference_mask_bbox_px": layer_rows[review_index]["reference_mask_bbox_px"],
+                        "model_mask_bbox_px": layer_rows[review_index]["model_mask_bbox_px"],
                         "evidence": layer_evidence,
                     },
                     "evidence": color_evidence,
@@ -73,7 +78,7 @@ class AngleReviewTests(unittest.TestCase):
                         "notes": "unit fixture",
                     },
                 }
-                for index in range(8)
+                for review_index, index in enumerate(review_indices)
             ]
             color_report = {
                 "schema": angle_review.COORDINATE_COLOR_SCHEMA,
@@ -92,24 +97,27 @@ class AngleReviewTests(unittest.TestCase):
             color_path = root / "coordinate-color.json"
             color_path.write_text(json.dumps(color_report), encoding="utf-8")
             rows = []
-            for index in range(8):
+            for review_index, index in enumerate(review_indices):
                 rows.append(
                     {
                         "view_id": f"view-{index:03d}",
+                        "review_round": review_index // 4 + 1,
+                        "review_position": review_index % 4 + 1,
+                        "yaw_deg": index * 45.0,
                         "metrics": {
                             "height_error_pct": 0.0,
                             "width_error_pct": 0.0,
                             "center_error_pct_of_frame_diagonal": 0.0,
                         },
                         "mask_layers": {
-                            "canvas": layer_rows[index]["canvas"],
-                            "reference_mask_bbox_px": layer_rows[index]["reference_mask_bbox_px"],
-                            "model_mask_bbox_px": layer_rows[index]["model_mask_bbox_px"],
+                            "canvas": layer_rows[review_index]["canvas"],
+                            "reference_mask_bbox_px": layer_rows[review_index]["reference_mask_bbox_px"],
+                            "model_mask_bbox_px": layer_rows[review_index]["model_mask_bbox_px"],
                             "evidence": layer_evidence,
                         },
                         "coordinate_color": {
-                            "canvas": color_rows[index]["canvas"],
-                            "background_rgb": color_rows[index]["background_rgb"],
+                            "canvas": color_rows[review_index]["canvas"],
+                            "background_rgb": color_rows[review_index]["background_rgb"],
                             "evidence": color_evidence,
                         },
                         "evidence": {"overlay": evidence_record, "difference": evidence_record, "panel": evidence_record},

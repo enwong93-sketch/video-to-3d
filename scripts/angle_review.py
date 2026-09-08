@@ -14,7 +14,7 @@ from typing import Any
 
 from PIL import Image, ImageChops, ImageDraw
 
-from artifact_safety import read_json_limited, safe_output_path, validate_image_size, validate_view_ids
+from artifact_safety import quadrant_review_order, read_json_limited, safe_output_path, validate_image_size, validate_view_ids
 
 from coordinate_color_compare import (
     COMPARE_SCHEMA as COORDINATE_COLOR_SCHEMA,
@@ -138,7 +138,9 @@ def prepare(args: argparse.Namespace) -> int:
     evidence_dir.mkdir(parents=True, exist_ok=True)
     factor = float(render.get("resolution_percentage", 100)) / 100.0
     rows = []
-    for view_id in sorted(views, key=lambda key: float(views[key]["target_yaw_deg"])):
+    ordered_views = quadrant_review_order(views.values(), error_type=ReviewError)
+    for review_index, view in enumerate(ordered_views):
+        view_id = view["view_id"]
         ref_file = (reference_path.parent / views[view_id]["path"]).resolve()
         model_file = Path(renders[view_id]["path"]).expanduser().resolve()
         if not ref_file.is_file() or sha256(ref_file) != views[view_id].get("sha256"):
@@ -181,6 +183,8 @@ def prepare(args: argparse.Namespace) -> int:
         rows.append(
             {
                 "view_id": view_id,
+                "review_round": review_index // 4 + 1,
+                "review_position": review_index % 4 + 1,
                 "yaw_deg": float(views[view_id]["target_yaw_deg"]),
                 "reference": {"path": str(ref_file), "sha256": sha256(ref_file), "bbox_px": list(reference_bbox)},
                 "render": {"path": str(model_file), "sha256": sha256(model_file), "bbox_px": list(model_bbox)},
@@ -219,12 +223,13 @@ def prepare(args: argparse.Namespace) -> int:
         "mask_layer_report_sha256": sha256(mask_layer_path),
         "coordinate_color_report": str(coordinate_color_path),
         "coordinate_color_report_sha256": sha256(coordinate_color_path),
+        "analysis_order": coordinate_color.get("analysis_order"),
         "thresholds": {
             "max_height_error_pct": args.max_height_error_pct,
             "max_width_error_pct": args.max_width_error_pct,
             "max_center_error_pct": args.max_center_error_pct,
         },
-        "instructions": "Inspect the same-canvas mask overlay first, then the same-camera coordinate/color panel, checkerboard, 50/50 overlay and absolute color difference for every view. The tools display evidence only; the Agent judges repairs and independently sets every gate pass or fail before beauty approval.",
+        "instructions": "Use the four-quadrant round order. For each view inspect fused mask/scale and coordinate/color evidence together; close all four opposing views before advancing. The tools display evidence only; the Agent judges repairs and sets every gate before beauty approval.",
         "views": rows,
         "retopology_review": {
             "status": "pending",
@@ -260,6 +265,14 @@ def verify(args: argparse.Namespace) -> int:
     ids = [row.get("view_id") for row in rows if isinstance(row, dict)]
     if len(ids) != len(set(ids)):
         errors.append("review view IDs are not unique")
+    try:
+        ordered_ids = [row["view_id"] for row in quadrant_review_order([
+            {"view_id": row["view_id"], "target_yaw_deg": row["yaw_deg"]} for row in rows if isinstance(row, dict)
+        ], error_type=ReviewError)]
+        if ids != ordered_ids:
+            errors.append("final review does not follow the four-quadrant review order")
+    except (KeyError, ReviewError) as exc:
+        errors.append(f"invalid four-quadrant review order: {exc}")
     mask_layer_path = Path(str(review.get("mask_layer_report", ""))).expanduser().resolve()
     mask_layer_rows: dict[str, dict[str, Any]] = {}
     if not mask_layer_path.is_file() or sha256(mask_layer_path) != review.get("mask_layer_report_sha256"):

@@ -68,6 +68,11 @@ Continue at exactly `360 / requested_angles` yaw spacing through but not includi
 paths and hashes are mandatory; `build` rejects missing, changed, duplicate, uneven, or out-of-range
 anchors.
 
+The admitted view count must be divisible by four. `analysis_order.strategy` is
+`four_quadrant_rounds`: each round contains four `view_id` values separated by exactly 90 degrees.
+For 24 views the round offsets are `0°, 45°, 15°, 60°, 30°, 75°`; each offset expands across the four
+quadrants. Every downstream Blender, mask, color, and final-review stage preserves this order.
+
 ## Blender alignment
 
 Use the full-resolution pixel convention `[left, top, right, bottom]`, with the image origin at the
